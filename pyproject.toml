@@ -5,5 +5,6 @@ description = "Benchmarking gene embeddings from single cell foundation models t
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "jupyterlab>=4.5.2",
     "scgpt>=0.2.4",
 ]
