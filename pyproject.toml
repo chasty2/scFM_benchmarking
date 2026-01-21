@@ -1,0 +1,9 @@
+[project]
+name = "scfm-benchmarking"
+version = "0.1.0"
+description = "Benchmarking gene embeddings from single cell foundation models to evaluate their performance on gene regulatory network predictions"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scgpt>=0.2.4",
+]
