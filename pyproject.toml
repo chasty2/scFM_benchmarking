@@ -8,4 +8,6 @@ dependencies = [
     "gseapy>=1.1.11",
     "jupyterlab>=4.5.2",
     "scgpt>=0.2.4",
+    "torch==2.3.1",
+    "torchtext>=0.18.0",
 ]
