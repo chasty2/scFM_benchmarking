@@ -1,0 +1,6 @@
+PAD_TOKEN = "<pad>"
+SPECIAL_TOKENS = [PAD_TOKEN, "<cls>", "<eoc>"]
+N_HVG = 1200
+N_BINS = 51
+MASK_VALUE = -1
+PAD_VALUE = -2
