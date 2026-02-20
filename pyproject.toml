@@ -13,6 +13,7 @@ dependencies = [
     "torch-geometric>=2.7.0",
     "torchtext>=0.18.0",
     "wandb>=0.24.1",
+    "pytest>=8.0",
 ]
 
 [build-system]
@@ -21,3 +22,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scfm_utils"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
