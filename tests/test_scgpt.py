@@ -56,11 +56,14 @@ def scgpt_dataset(adata, model_bundle) -> ScGPTDataset:
 
 
 @pytest.fixture(scope="module")
-def embeddings(model_bundle, scgpt_dataset) -> ScGPTEmbeddings:
+def embeddings(model_bundle, scgpt_dataset, adata) -> ScGPTEmbeddings:
+    cell_types = np.array(adata.obs["celltype"].values[:MAX_CELLS])
     return encode_scgpt_embeddings(
         model_bundle.model,
         scgpt_dataset.dataloader,
         model_bundle.vocab,
+        scgpt_dataset.genes_in_vocab,
+        cell_types,
     )
 
 
@@ -131,6 +134,29 @@ class TestScGPTEmbeddings:
         n_genes = len(scgpt_dataset.genes_in_vocab)
         assert embeddings.gene_embeddings.shape == (MAX_CELLS, n_genes, embsize)
 
+    def test_gene_names(self, embeddings, scgpt_dataset):
+        assert isinstance(embeddings.gene_names, list)
+        assert all(isinstance(g, str) for g in embeddings.gene_names)
+        n_genes = len(scgpt_dataset.genes_in_vocab)
+        assert len(embeddings.gene_names) == n_genes
+
     def test_embeddings_finite(self, embeddings):
         assert np.all(np.isfinite(embeddings.cls_embeddings))
         assert np.all(np.isfinite(embeddings.gene_embeddings))
+
+    def test_cell_types(self, embeddings):
+        assert isinstance(embeddings.cell_types, np.ndarray)
+        assert embeddings.cell_types.shape == (MAX_CELLS,)
+
+    def test_average_gene_embeddings(self, embeddings, model_bundle, scgpt_dataset):
+        avg = embeddings.average_gene_embeddings()
+
+        assert isinstance(avg, dict)
+        expected_keys = set(np.unique(embeddings.cell_types))
+        assert set(avg.keys()) == expected_keys
+
+        n_genes = len(scgpt_dataset.genes_in_vocab)
+        embsize = model_bundle.config["embsize"]
+        for _, emb in avg.items():
+            assert emb.shape == (n_genes, embsize)
+            assert np.all(np.isfinite(emb))
