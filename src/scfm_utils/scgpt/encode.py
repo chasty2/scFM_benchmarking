@@ -15,12 +15,28 @@ from scfm_utils.constants import PAD_TOKEN
 class ScGPTEmbeddings:
     cls_embeddings: np.ndarray  # (n_cells, embsize)
     gene_embeddings: np.ndarray  # (n_cells, n_genes, embsize)
+    gene_names: list[str]  # length n_genes
+    cell_types: np.ndarray  # (n_cells,) cell type labels
+
+    def average_gene_embeddings(self) -> dict[str, np.ndarray]:
+        """Average gene embeddings per cell type.
+
+        Returns:
+            Dict mapping each cell type to an (n_genes, embsize) array.
+        """
+        unique_cell_types = np.unique(self.cell_types)
+        return {
+            cell_type: self.gene_embeddings[self.cell_types == cell_type].mean(axis=0)
+            for cell_type in unique_cell_types
+        }
 
 
 def encode_scgpt_embeddings(
     model: TransformerModel,
     dataloader: DataLoader,
     vocab: GeneVocab,
+    gene_names: list[str],
+    cell_types: np.ndarray,
     device: torch.device | None = None,
 ) -> ScGPTEmbeddings:
     """Run scGPT encoder over a DataLoader and return CLS and gene embeddings."""
@@ -48,4 +64,6 @@ def encode_scgpt_embeddings(
     return ScGPTEmbeddings(
         cls_embeddings=torch.cat(all_cls, dim=0).numpy(),
         gene_embeddings=torch.cat(all_gene, dim=0).numpy(),
+        gene_names=gene_names,
+        cell_types=cell_types,
     )
