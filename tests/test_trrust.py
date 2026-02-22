@@ -8,19 +8,17 @@ import numpy as np
 import pytest
 import torch
 
-from scfm_utils.scgpt.encode import ScGPTEmbeddings
 from scfm_utils.trrust import (
     REGULATION_LABELS,
+    REGULATION_LABEL_NAMES,
     TRRClassifierModel,
     TRRUSTData,
     load_trrust_data,
 )
-from scfm_utils.trrust.training_data import _deduplicate, _parse_tsv, TRRUSTRecord
+from scfm_utils.trrust.training_data import _deduplicate, _parse_tsv
 
 EMBSIZE = 4
 GENE_NAMES = ["ABL1", "BAX", "BCL2", "MYC", "TP53"]
-N_GENES = len(GENE_NAMES)
-N_CELLS = 6
 
 TSV_CONTENT = """\
 ABL1	BAX	Activation	11753601
@@ -54,15 +52,9 @@ def conflict_tsv_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def embeddings() -> ScGPTEmbeddings:
+def gene_embeddings() -> dict[str, np.ndarray]:
     rng = np.random.default_rng(42)
-    cell_types = np.array(["TypeA"] * 3 + ["TypeB"] * 3)
-    return ScGPTEmbeddings(
-        cls_embeddings=rng.standard_normal((N_CELLS, EMBSIZE)),
-        gene_embeddings=rng.standard_normal((N_CELLS, N_GENES, EMBSIZE)),
-        gene_names=GENE_NAMES,
-        cell_types=cell_types,
-    )
+    return {name: rng.standard_normal(EMBSIZE) for name in GENE_NAMES}
 
 
 class TestParseTsv:
@@ -72,84 +64,78 @@ class TestParseTsv:
 
     def test_fields(self, tsv_path):
         records = _parse_tsv(tsv_path)
-        r = records[0]
-        assert r.tf == "ABL1"
-        assert r.target == "BAX"
-        assert r.regulation == "Activation"
+        tf, target, regulation = records[0]
+        assert tf == "ABL1"
+        assert target == "BAX"
+        assert regulation == "Activation"
 
 
 class TestDeduplicate:
     def test_drops_conflicting_labels(self, conflict_tsv_path):
         records = _parse_tsv(conflict_tsv_path)
         deduped = _deduplicate(records)
-        pairs = [(r.tf, r.target) for r in deduped]
+        pairs = [(r[0], r[1]) for r in deduped]
         assert ("ABL1", "BAX") not in pairs
 
     def test_keeps_consistent_labels(self, conflict_tsv_path):
         records = _parse_tsv(conflict_tsv_path)
         deduped = _deduplicate(records)
-        pairs = [(r.tf, r.target) for r in deduped]
+        pairs = [(r[0], r[1]) for r in deduped]
         assert ("BCL2", "MYC") in pairs
 
     def test_directionality(self):
         records = [
-            TRRUSTRecord(tf="A", target="B", regulation="Activation"),
-            TRRUSTRecord(tf="B", target="A", regulation="Repression"),
+            ("A", "B", "Activation"),
+            ("B", "A", "Repression"),
         ]
         deduped = _deduplicate(records)
         assert len(deduped) == 2
 
 
 class TestLoadTrrustData:
-    def test_return_type(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
+    def test_return_type(self, tsv_path, gene_embeddings):
+        data = load_trrust_data(tsv_path, gene_embeddings)
         assert isinstance(data, TRRUSTData)
 
-    def test_filtered_records_have_valid_genes(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
+    def test_filtered_records_have_valid_genes(self, tsv_path, gene_embeddings):
+        data = load_trrust_data(tsv_path, gene_embeddings)
         gene_set = set(GENE_NAMES)
-        for rec in data.filtered_records:
+        for rec in data.records:
             assert rec.tf in gene_set
             assert rec.target in gene_set
 
-    def test_filtered_excludes_missing_genes(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
-        for rec in data.filtered_records:
+    def test_filtered_excludes_missing_genes(self, tsv_path, gene_embeddings):
+        data = load_trrust_data(tsv_path, gene_embeddings)
+        for rec in data.records:
             assert rec.tf != "NOTINGENES"
             assert rec.target != "NOTINGENES"
 
-    def test_embedding_shapes(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
-        n_cell_types = len(np.unique(embeddings.cell_types))
-        n_filtered = len(data.filtered_records)
-        expected_rows = n_cell_types * n_filtered
-        assert data.tf_embeddings.shape == (expected_rows, EMBSIZE)
-        assert data.target_embeddings.shape == (expected_rows, EMBSIZE)
+    def test_record_count(self, tsv_path, gene_embeddings):
+        # TSV has 4 valid pairs after excluding NOTINGENES rows:
+        # ABL1->BAX, ABL1->BCL2, BCL2->ABL1, MYC->TP53
+        data = load_trrust_data(tsv_path, gene_embeddings)
+        assert len(data.records) == 4
 
-    def test_labels_valid(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
+    def test_embedding_shapes(self, tsv_path, gene_embeddings):
+        data = load_trrust_data(tsv_path, gene_embeddings)
+        n = len(data.records)
+        assert data.tf_embeddings.shape == (n, EMBSIZE)
+        assert data.target_embeddings.shape == (n, EMBSIZE)
+
+    def test_record_embeddings_match_input(self, tsv_path, gene_embeddings):
+        data = load_trrust_data(tsv_path, gene_embeddings)
+        for rec in data.records:
+            np.testing.assert_array_equal(rec.tf_embedding, gene_embeddings[rec.tf])
+            np.testing.assert_array_equal(rec.target_embedding, gene_embeddings[rec.target])
+
+    def test_labels_valid(self, tsv_path, gene_embeddings):
+        data = load_trrust_data(tsv_path, gene_embeddings)
         assert data.labels.dtype == np.int64
         assert set(data.labels.tolist()).issubset({0, 1, 2})
 
-    def test_label_names_inverse(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
+    def test_label_names_inverse(self, tsv_path, gene_embeddings):
         for k, v in REGULATION_LABELS.items():
-            assert data.label_names[v] == k
-
-    def test_cell_types_length(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
-        assert len(data.cell_types) == len(data.labels)
-
-    def test_all_cell_types_present(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
-        assert set(data.cell_types) == {"TypeA", "TypeB"}
-
-    def test_average_gene_embeddings_stored(self, tsv_path, embeddings):
-        data = load_trrust_data(tsv_path, embeddings)
-        assert isinstance(data.average_gene_embeddings, dict)
-        assert set(data.average_gene_embeddings.keys()) == {"TypeA", "TypeB"}
-        for emb in data.average_gene_embeddings.values():
-            assert emb.shape == (N_GENES, EMBSIZE)
+            assert REGULATION_LABEL_NAMES[v] == k
 
 
 class TestTRRClassifierModel:
