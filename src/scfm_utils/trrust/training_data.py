@@ -6,100 +6,77 @@ from pathlib import Path
 
 import numpy as np
 
-from scfm_utils.scgpt.encode import ScGPTEmbeddings
-
 REGULATION_LABELS = {"Activation": 0, "Repression": 1, "Unknown": 2}
+REGULATION_LABEL_NAMES = {v: k for k, v in REGULATION_LABELS.items()}
 
 
 @dataclass
 class TRRUSTRecord:
-    """A single TF → target regulatory relationship."""
+    """A single TF → target regulatory relationship with embeddings."""
 
     tf: str
+    tf_embedding: np.ndarray
     target: str
-    regulation: str
+    target_embedding: np.ndarray
+    label: int
 
 
 @dataclass
 class TRRUSTData:
-    """TRRUST regulatory relationships filtered to genes present in embeddings.
-
-    Attributes:
-        records: All deduplicated TRRUST records from the TSV.
-        filtered_records: Records where both TF and target are in the embeddings.
-        tf_embeddings: TF gene embeddings per sample, shape (n_samples, embsize).
-        target_embeddings: Target gene embeddings per sample, shape (n_samples, embsize).
-        labels: Integer-encoded regulation labels, shape (n_samples,).
-        label_names: Mapping from integer label to regulation string.
-        cell_types: Cell type for each sample, shape (n_samples,).
-        average_gene_embeddings: Average gene embeddings per cell type,
-            mapping cell type → (n_genes, embsize).
-    """
+    """TRRUST regulatory relationships filtered to genes present in embeddings."""
 
     records: list[TRRUSTRecord]
-    filtered_records: list[TRRUSTRecord]
-    tf_embeddings: np.ndarray
-    target_embeddings: np.ndarray
-    labels: np.ndarray
-    label_names: dict[int, str]
-    cell_types: np.ndarray
-    average_gene_embeddings: dict[str, np.ndarray]
+
+    @property
+    def tf_embeddings(self) -> np.ndarray:
+        return np.stack([r.tf_embedding for r in self.records])
+
+    @property
+    def target_embeddings(self) -> np.ndarray:
+        return np.stack([r.target_embedding for r in self.records])
+
+    @property
+    def labels(self) -> np.ndarray:
+        return np.array([r.label for r in self.records], dtype=np.int64)
 
 
 def load_trrust_data(
     tsv_path: str | Path,
-    embeddings: ScGPTEmbeddings,
+    gene_embeddings: dict[str, np.ndarray],
 ) -> TRRUSTData:
     """Load TRRUST TSV and create training data from gene embeddings.
 
-    For each cell type in the embeddings, creates one training sample per
-    (TF, target) pair where both genes exist in the embedding vocabulary.
-    Features are the concatenation of the TF and target average gene
-    embeddings. Labels are the integer-encoded regulation type.
+    Args:
+        tsv_path: Path to the TRRUST TSV file.
+        gene_embeddings: Mapping of gene name to embedding vector.
 
-    Pairs are directional: (A, B) and (B, A) are treated as distinct.
-    Pairs with conflicting regulation labels are dropped.
+    Returns:
+        TRRUSTData containing one TRRUSTRecord per valid (TF, target) pair.
     """
-    records = _parse_tsv(Path(tsv_path))
-    records = _deduplicate(records)
+    raw_records = _parse_tsv(Path(tsv_path))
+    deduped = _deduplicate(raw_records)
 
-    gene_to_idx = {g: i for i, g in enumerate(embeddings.gene_names)}
+    records = []
+    for tf, target, regulation in deduped:
+        if tf in gene_embeddings and target in gene_embeddings:
+            records.append(
+                TRRUSTRecord(
+                    tf=tf,
+                    tf_embedding=gene_embeddings[tf],
+                    target=target,
+                    target_embedding=gene_embeddings[target],
+                    label=REGULATION_LABELS[regulation],
+                )
+            )
 
-    filtered = [
-        r for r in records if r.tf in gene_to_idx and r.target in gene_to_idx
-    ]
-
-    avg_embeddings = embeddings.average_gene_embeddings()
-
-    tf_list = []
-    target_list = []
-    labels_list = []
-    cell_types_list = []
-
-    for cell_type, gene_embs in avg_embeddings.items():
-        for rec in filtered:
-            tf_list.append(gene_embs[gene_to_idx[rec.tf]])
-            target_list.append(gene_embs[gene_to_idx[rec.target]])
-            labels_list.append(REGULATION_LABELS[rec.regulation])
-            cell_types_list.append(cell_type)
-
-    label_names = {v: k for k, v in REGULATION_LABELS.items()}
-    embsize = next(iter(avg_embeddings.values())).shape[1] if avg_embeddings else 0
-
-    return TRRUSTData(
-        records=records,
-        filtered_records=filtered,
-        tf_embeddings=np.stack(tf_list) if tf_list else np.empty((0, embsize)),
-        target_embeddings=np.stack(target_list) if target_list else np.empty((0, embsize)),
-        labels=np.array(labels_list, dtype=np.int64),
-        label_names=label_names,
-        cell_types=np.array(cell_types_list),
-        average_gene_embeddings=avg_embeddings,
-    )
+    return TRRUSTData(records=records)
 
 
-def _parse_tsv(tsv_path: Path) -> list[TRRUSTRecord]:
-    """Parse the 4-column TRRUST TSV (no header)."""
+def _parse_tsv(tsv_path: Path) -> list[tuple[str, str, str]]:
+    """Parse the 4-column TRRUST TSV (no header).
+
+    Returns list of (tf, target, regulation) tuples.
+    """
     records = []
     with open(tsv_path) as f:
         for line in f:
@@ -107,11 +84,13 @@ def _parse_tsv(tsv_path: Path) -> list[TRRUSTRecord]:
             if len(parts) != 4:
                 continue
             tf, target, regulation, _pmids = parts
-            records.append(TRRUSTRecord(tf=tf, target=target, regulation=regulation))
+            records.append((tf, target, regulation))
     return records
 
 
-def _deduplicate(records: list[TRRUSTRecord]) -> list[TRRUSTRecord]:
+def _deduplicate(
+    records: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
     """Remove (TF, target) pairs that have conflicting regulation labels.
 
     Pairs are directional: (A, B) and (B, A) are distinct.
@@ -119,11 +98,11 @@ def _deduplicate(records: list[TRRUSTRecord]) -> list[TRRUSTRecord]:
     If it appears with different labels, drop all copies.
     """
     pair_labels: dict[tuple[str, str], set[str]] = defaultdict(set)
-    pair_first: dict[tuple[str, str], TRRUSTRecord] = {}
+    pair_first: dict[tuple[str, str], tuple[str, str, str]] = {}
 
     for rec in records:
-        key = (rec.tf, rec.target)
-        pair_labels[key].add(rec.regulation)
+        key = (rec[0], rec[1])
+        pair_labels[key].add(rec[2])
         if key not in pair_first:
             pair_first[key] = rec
 

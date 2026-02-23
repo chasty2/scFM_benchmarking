@@ -1,5 +1,6 @@
 from scfm_utils.trrust.classifier import TRRClassifierModel
 from scfm_utils.trrust.training_data import (
+    REGULATION_LABEL_NAMES,
     REGULATION_LABELS,
     TRRUSTData,
     TRRUSTRecord,
@@ -7,6 +8,7 @@ from scfm_utils.trrust.training_data import (
 )
 
 __all__ = [
+    "REGULATION_LABEL_NAMES",
     "REGULATION_LABELS",
     "TRRClassifierModel",
     "TRRUSTData",
