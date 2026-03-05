@@ -12,20 +12,13 @@ from scfm_utils.trrust import (
     BINARY_LABELS,
     REGULATION_LABELS,
     REGULATION_LABEL_NAMES,
-    TERNARY_LABELS,
     TRRClassifierModel,
     TRRUSTData,
     load_binary_trrust_data,
     load_ternary_trrust_data,
     load_trrust_data,
 )
-from scfm_utils.trrust.training_data import (
-    _collect_raw_pairs,
-    _deduplicate,
-    _generate_none_pairs,
-    _parse_tsv,
-    _trrust_genes,
-)
+from scfm_utils.trrust.training_data import _deduplicate, _parse_tsv
 
 EMBSIZE = 4
 GENE_NAMES = ["ABL1", "BAX", "BCL2", "MYC", "TP53"]
