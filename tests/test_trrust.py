@@ -9,10 +9,13 @@ import pytest
 import torch
 
 from scfm_utils.trrust import (
+    BINARY_LABELS,
     REGULATION_LABELS,
     REGULATION_LABEL_NAMES,
     TRRClassifierModel,
     TRRUSTData,
+    load_binary_trrust_data,
+    load_ternary_trrust_data,
     load_trrust_data,
 )
 from scfm_utils.trrust.training_data import _deduplicate, _parse_tsv
@@ -155,3 +158,94 @@ class TestTRRClassifierModel:
         loss.backward()
         assert model.bilinear.weight.grad is not None
         assert model.bilinear.weight.grad.shape == (3, EMBSIZE, EMBSIZE)
+
+
+class TestGenerateNonePairs:
+    def test_correct_count(self, tsv_path, gene_embeddings):
+        raw = _parse_tsv(tsv_path)
+        raw_pairs = _collect_raw_pairs(raw)
+        genes = _trrust_genes(raw, gene_embeddings)
+        rng = np.random.default_rng(0)
+        pairs = _generate_none_pairs(raw_pairs, gene_embeddings, genes, n=3, none_label=0, rng=rng)
+        assert len(pairs) == 3
+
+    def test_no_overlap_with_raw_pairs(self, tsv_path, gene_embeddings):
+        raw = _parse_tsv(tsv_path)
+        raw_pairs = _collect_raw_pairs(raw)
+        genes = _trrust_genes(raw, gene_embeddings)
+        rng = np.random.default_rng(0)
+        pairs = _generate_none_pairs(raw_pairs, gene_embeddings, genes, n=5, none_label=0, rng=rng)
+        for rec in pairs:
+            assert (rec.tf, rec.target) not in raw_pairs
+
+    def test_genes_from_trrust_set(self, tsv_path, gene_embeddings):
+        raw = _parse_tsv(tsv_path)
+        raw_pairs = _collect_raw_pairs(raw)
+        genes = _trrust_genes(raw, gene_embeddings)
+        gene_set = set(genes)
+        rng = np.random.default_rng(0)
+        pairs = _generate_none_pairs(raw_pairs, gene_embeddings, genes, n=3, none_label=0, rng=rng)
+        for rec in pairs:
+            assert rec.tf in gene_set
+            assert rec.target in gene_set
+
+
+class TestLoadBinaryTrrustData:
+    def test_labels_are_binary(self, tsv_path, gene_embeddings):
+        data = load_binary_trrust_data(tsv_path, gene_embeddings)
+        assert set(data.labels.tolist()) == {0, 1}
+
+    def test_equal_class_counts(self, tsv_path, gene_embeddings):
+        data = load_binary_trrust_data(tsv_path, gene_embeddings)
+        labels = data.labels
+        assert (labels == 0).sum() == (labels == 1).sum()
+
+    def test_no_none_pairs_in_raw(self, tsv_path, gene_embeddings):
+        raw = _parse_tsv(tsv_path)
+        raw_pairs = _collect_raw_pairs(raw)
+        data = load_binary_trrust_data(tsv_path, gene_embeddings)
+        for rec in data.records:
+            if rec.label == BINARY_LABELS["None"]:
+                assert (rec.tf, rec.target) not in raw_pairs
+
+    def test_reproducible_with_seed(self, tsv_path, gene_embeddings):
+        d1 = load_binary_trrust_data(tsv_path, gene_embeddings, seed=123)
+        d2 = load_binary_trrust_data(tsv_path, gene_embeddings, seed=123)
+        pairs1 = [(r.tf, r.target) for r in d1.records]
+        pairs2 = [(r.tf, r.target) for r in d2.records]
+        assert pairs1 == pairs2
+
+
+class TestLoadTernaryTrrustData:
+    def test_labels_are_ternary(self, tsv_path, gene_embeddings):
+        data = load_ternary_trrust_data(tsv_path, gene_embeddings)
+        assert set(data.labels.tolist()).issubset({0, 1, 2})
+
+    def test_no_unknown_records(self, tsv_path, gene_embeddings):
+        # The original data has MYC->TP53 as Unknown; verify it's excluded
+        data = load_ternary_trrust_data(tsv_path, gene_embeddings)
+        real_pairs = {(r.tf, r.target) for r in data.records if r.label != TERNARY_LABELS["None"]}
+        assert ("MYC", "TP53") not in real_pairs
+
+    def test_none_count_approx_one_third(self, tsv_path, gene_embeddings):
+        data = load_ternary_trrust_data(tsv_path, gene_embeddings)
+        labels = data.labels
+        n_none = (labels == TERNARY_LABELS["None"]).sum()
+        n_total = len(labels)
+        # None should be roughly 1/3 of total (may differ by 1 due to integer division)
+        assert abs(n_none / n_total - 1 / 3) < 0.1
+
+    def test_unknown_pairs_excluded_from_none(self, tsv_path, gene_embeddings):
+        raw = _parse_tsv(tsv_path)
+        raw_pairs = _collect_raw_pairs(raw)
+        data = load_ternary_trrust_data(tsv_path, gene_embeddings)
+        for rec in data.records:
+            if rec.label == TERNARY_LABELS["None"]:
+                assert (rec.tf, rec.target) not in raw_pairs
+
+    def test_reproducible_with_seed(self, tsv_path, gene_embeddings):
+        d1 = load_ternary_trrust_data(tsv_path, gene_embeddings, seed=99)
+        d2 = load_ternary_trrust_data(tsv_path, gene_embeddings, seed=99)
+        pairs1 = [(r.tf, r.target) for r in d1.records]
+        pairs2 = [(r.tf, r.target) for r in d2.records]
+        assert pairs1 == pairs2

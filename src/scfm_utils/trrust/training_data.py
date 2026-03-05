@@ -109,3 +109,135 @@ def _deduplicate(
     return [
         pair_first[key] for key, labels in pair_labels.items() if len(labels) == 1
     ]
+
+
+def _collect_raw_pairs(raw_records: list[tuple[str, str, str]]) -> set[tuple[str, str]]:
+    """Return all (TF, target) pairs from raw parsed records."""
+    return {(r[0], r[1]) for r in raw_records}
+
+
+def _trrust_genes(
+    raw_records: list[tuple[str, str, str]],
+    gene_embeddings: dict[str, np.ndarray],
+) -> list[str]:
+    """Return sorted list of genes appearing in TRRUST that also have embeddings."""
+    genes = set()
+    for tf, target, _ in raw_records:
+        genes.add(tf)
+        genes.add(target)
+    return sorted(genes & gene_embeddings.keys())
+
+
+def _generate_none_pairs(
+    all_raw_pairs: set[tuple[str, str]],
+    gene_embeddings: dict[str, np.ndarray],
+    trrust_genes: list[str],
+    n: int,
+    none_label: int,
+    rng: np.random.Generator,
+) -> list[TRRUSTRecord]:
+    """Sample random gene pairs with no known TRRUST relationship."""
+    candidates = [
+        (a, b)
+        for a in trrust_genes
+        for b in trrust_genes
+        if a != b and (a, b) not in all_raw_pairs
+    ]
+    if len(candidates) < n:
+        raise ValueError(
+            f"Not enough candidate None pairs: need {n}, only {len(candidates)} available"
+        )
+    indices = rng.choice(len(candidates), size=n, replace=False)
+    records = []
+    for idx in indices:
+        a, b = candidates[idx]
+        records.append(
+            TRRUSTRecord(
+                tf=a,
+                tf_embedding=gene_embeddings[a],
+                target=b,
+                target_embedding=gene_embeddings[b],
+                label=none_label,
+            )
+        )
+    return records
+
+
+def load_binary_trrust_data(
+    tsv_path: str | Path,
+    gene_embeddings: dict[str, np.ndarray],
+    seed: int = 42,
+) -> TRRUSTData:
+    """Load TRRUST data for binary classification (Relationship vs None).
+
+    All regulation types (Activation, Repression, Unknown) become label 1.
+    An equal number of None pairs (label 0) are sampled from gene pairs
+    with no known TRRUST relationship.
+    """
+    raw_records = _parse_tsv(Path(tsv_path))
+    all_raw_pairs = _collect_raw_pairs(raw_records)
+    deduped = _deduplicate(raw_records)
+    genes = _trrust_genes(raw_records, gene_embeddings)
+
+    relationship_records = []
+    for tf, target, _regulation in deduped:
+        if tf in gene_embeddings and target in gene_embeddings:
+            relationship_records.append(
+                TRRUSTRecord(
+                    tf=tf,
+                    tf_embedding=gene_embeddings[tf],
+                    target=target,
+                    target_embedding=gene_embeddings[target],
+                    label=BINARY_LABELS["Relationship"],
+                )
+            )
+
+    rng = np.random.default_rng(seed)
+    none_records = _generate_none_pairs(
+        all_raw_pairs, gene_embeddings, genes,
+        n=len(relationship_records),
+        none_label=BINARY_LABELS["None"],
+        rng=rng,
+    )
+    return TRRUSTData(records=relationship_records + none_records)
+
+
+def load_ternary_trrust_data(
+    tsv_path: str | Path,
+    gene_embeddings: dict[str, np.ndarray],
+    seed: int = 42,
+) -> TRRUSTData:
+    """Load TRRUST data for ternary classification (Activation, Repression, None).
+
+    Unknown entries are removed. None pairs (label 2) are sampled to be ~1/3
+    of the total dataset. Unknown pairs are excluded from None sampling.
+    """
+    raw_records = _parse_tsv(Path(tsv_path))
+    all_raw_pairs = _collect_raw_pairs(raw_records)
+    deduped = _deduplicate(raw_records)
+    genes = _trrust_genes(raw_records, gene_embeddings)
+
+    real_records = []
+    for tf, target, regulation in deduped:
+        if regulation == "Unknown":
+            continue
+        if tf in gene_embeddings and target in gene_embeddings:
+            real_records.append(
+                TRRUSTRecord(
+                    tf=tf,
+                    tf_embedding=gene_embeddings[tf],
+                    target=target,
+                    target_embedding=gene_embeddings[target],
+                    label=TERNARY_LABELS[regulation],
+                )
+            )
+
+    rng = np.random.default_rng(seed)
+    n_none = len(real_records) // 2
+    none_records = _generate_none_pairs(
+        all_raw_pairs, gene_embeddings, genes,
+        n=n_none,
+        none_label=TERNARY_LABELS["None"],
+        rng=rng,
+    )
+    return TRRUSTData(records=real_records + none_records)
