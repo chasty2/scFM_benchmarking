@@ -1,5 +1,7 @@
 from scfm_utils.trrust.classifier import TRRClassifierModel
 from scfm_utils.trrust.training_data import (
+    BINARY_LABEL_NAMES,
+    BINARY_LABELS,
     REGULATION_LABEL_NAMES,
     REGULATION_LABELS,
     TERNARY_LABEL_NAMES,
@@ -12,6 +14,8 @@ from scfm_utils.trrust.training_data import (
 )
 
 __all__ = [
+    "BINARY_LABEL_NAMES",
+    "BINARY_LABELS",
     "REGULATION_LABEL_NAMES",
     "REGULATION_LABELS",
     "TERNARY_LABEL_NAMES",

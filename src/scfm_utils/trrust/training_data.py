@@ -9,6 +9,12 @@ import numpy as np
 REGULATION_LABELS = {"Activation": 0, "Repression": 1, "Unknown": 2}
 REGULATION_LABEL_NAMES = {v: k for k, v in REGULATION_LABELS.items()}
 
+BINARY_LABELS = {"None": 0, "Relationship": 1}
+BINARY_LABEL_NAMES = {v: k for k, v in BINARY_LABELS.items()}
+
+TERNARY_LABELS = {"Activation": 0, "Repression": 1, "None": 2}
+TERNARY_LABEL_NAMES = {v: k for k, v in TERNARY_LABELS.items()}
+
 
 @dataclass
 class TRRUSTRecord:
