@@ -16,6 +16,8 @@ from scfm_utils.constants import PAD_TOKEN
 from scfm_utils.scgpt.encode import ScGPTEmbeddings
 
 
+
+
 def encode_scgpt_embeddings_to_h5ad(
     model: TransformerModel,
     dataloader: DataLoader,
@@ -28,9 +30,23 @@ def encode_scgpt_embeddings_to_h5ad(
 ) -> None:
     """Stream scGPT embeddings to an h5ad file batch-by-batch.
 
-    CLS embeddings are stored in the AnnData X slot (n_cells, embsize).
-    Gene embeddings are stored as a custom h5py dataset at /gene_embeddings
-    (n_cells, n_genes, embsize).
+    h5ad file layout:
+
+    /
+    ├── X                      (n_cells, embsize) float32 — CLS token embeddings
+    ├── obs/                   AnnData obs group
+    │   ├── _index             cell index strings ("0", "1", ...)
+    │   └── celltype           categorical with codes/categories
+    ├── uns/
+    │   └── gene_names         (n_genes,) byte strings — gene identifiers
+    ├── embeddings/
+    │   └── gene               (n_cells, n_genes, embsize) float32 — per-gene embeddings
+    └── attrs:
+        └── encoding_complete  bool flag set to True after streaming finishes
+
+    The embeddings/ group is a custom HDF5 group (not an anndata slot) since
+    anndata does not natively support 3D arrays. All read functions use h5py
+    directly rather than anndata.read_h5ad.
     """
     if device is None:
         device = next(model.parameters()).device
@@ -63,8 +79,9 @@ def encode_scgpt_embeddings_to_h5ad(
             chunks=(min(batch_size, n_cells), embsize),
             compression=compression,
         )
-        gene_ds = h5f.create_dataset(
-            "gene_embeddings",
+        emb_grp = h5f.require_group("embeddings")
+        gene_ds = emb_grp.create_dataset(
+            "gene",
             shape=(n_cells, n_genes, embsize),
             dtype="float32",
             chunks=(min(batch_size, n_cells), n_genes, embsize),
@@ -92,27 +109,54 @@ def encode_scgpt_embeddings_to_h5ad(
         h5f.attrs["encoding_complete"] = True
 
 
+def _read_cell_types(obs_group: h5py.Group) -> np.ndarray:
+    """Read cell types from an anndata obs group, handling categoricals."""
+    celltype_group = obs_group["celltype"]
+    if "categories" in celltype_group:
+        categories = celltype_group["categories"][:]
+        codes = celltype_group["codes"][:]
+        cell_types = np.array([categories[c] for c in codes])
+    else:
+        cell_types = celltype_group[:]
+
+    if cell_types.dtype.kind in ("S", "O"):
+        cell_types = np.array(
+            [x.decode() if isinstance(x, bytes) else str(x) for x in cell_types]
+        )
+    return cell_types
+
+
 def load_scgpt_embeddings(path: str | Path) -> ScGPTEmbeddings:
     """Load full embeddings from h5ad into ScGPTEmbeddings.
 
     Note: This loads gene_embeddings entirely into RAM. For large datasets,
     prefer load_cls_embeddings() and load_average_gene_embeddings().
     """
-    adata = anndata.read_h5ad(path)
     with h5py.File(path, "r") as h5f:
-        gene_embs = h5f["gene_embeddings"][:]
+        cls_embs = h5f["X"][:]
+        gene_embs = h5f["embeddings"]["gene"][:]
         gene_names = list(h5f["uns"]["gene_names"][:])
+        cell_types = _read_cell_types(h5f["obs"])
+    gene_names = [g.decode() if isinstance(g, bytes) else str(g) for g in gene_names]
     return ScGPTEmbeddings(
-        cls_embeddings=np.asarray(adata.X),
+        cls_embeddings=cls_embs,
         gene_embeddings=gene_embs,
         gene_names=gene_names,
-        cell_types=np.asarray(adata.obs["celltype"].values),
+        cell_types=cell_types,
     )
 
 
 def load_cls_embeddings(path: str | Path) -> anndata.AnnData:
     """Load cls_embeddings as AnnData (X = cls_embeddings, obs = celltype)."""
-    return anndata.read_h5ad(path)
+    with h5py.File(path, "r") as h5f:
+        cls_embs = h5f["X"][:]
+        cell_types = _read_cell_types(h5f["obs"])
+        obs_index = h5f["obs"]["_index"][:]
+    obs_index = [x.decode() if isinstance(x, bytes) else str(x) for x in obs_index]
+    return anndata.AnnData(
+        X=cls_embs,
+        obs=pd.DataFrame({"celltype": cell_types}, index=obs_index),
+    )
 
 
 def load_gene_embeddings(
@@ -129,14 +173,15 @@ def load_gene_embeddings(
     """
     with h5py.File(path, "r") as h5f:
         if cell_indices is not None:
-            return h5f["gene_embeddings"][cell_indices]
-        return h5f["gene_embeddings"][:]
+            return h5f["embeddings"]["gene"][cell_indices]
+        return h5f["embeddings"]["gene"][:]
 
 
 def load_gene_names(path: str | Path) -> list[str]:
     """Read gene names from h5ad."""
     with h5py.File(path, "r") as h5f:
-        return list(h5f["uns"]["gene_names"][:])
+        raw = h5f["uns"]["gene_names"][:]
+    return [g.decode() if isinstance(g, bytes) else str(g) for g in raw]
 
 
 def load_average_gene_embeddings(
@@ -151,23 +196,9 @@ def load_average_gene_embeddings(
         Tuple of (averages dict mapping cell type -> (n_genes, embsize), gene_names list).
     """
     with h5py.File(path, "r") as h5f:
-        # Read cell types from obs — anndata stores categoricals with codes/categories
-        obs_group = h5f["obs"]
-        celltype_group = obs_group["celltype"]
-        if "categories" in celltype_group:
-            categories = celltype_group["categories"][:]
-            codes = celltype_group["codes"][:]
-            cell_types = np.array([categories[c] for c in codes])
-        else:
-            cell_types = celltype_group[:]
+        cell_types = _read_cell_types(h5f["obs"])
 
-        # Decode bytes to str if needed
-        if cell_types.dtype.kind == "S" or cell_types.dtype.kind == "O":
-            cell_types = np.array(
-                [x.decode() if isinstance(x, bytes) else str(x) for x in cell_types]
-            )
-
-        gene_ds = h5f["gene_embeddings"]
+        gene_ds = h5f["embeddings"]["gene"]
         n_cells = gene_ds.shape[0]
 
         unique_types = np.unique(cell_types)
