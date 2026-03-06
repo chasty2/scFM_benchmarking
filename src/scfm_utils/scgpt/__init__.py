@@ -1,5 +1,13 @@
 from scfm_utils.scgpt.dataset import ScGPTDataset, SeqDataset, create_scgpt_dataset
-from scfm_utils.scgpt.encode import ScGPTEmbeddings, encode_scgpt_embeddings
+from scfm_utils.scgpt.encode import (
+    ScGPTEmbeddings,
+    encode_scgpt_embeddings_to_h5ad,
+    load_average_gene_embeddings,
+    load_cls_embeddings,
+    load_gene_embeddings,
+    load_gene_names,
+    load_scgpt_embeddings,
+)
 from scfm_utils.scgpt.model import ScGPTModelBundle, load_scgpt_model
 
 __all__ = [
@@ -8,6 +16,11 @@ __all__ = [
     "ScGPTModelBundle",
     "SeqDataset",
     "create_scgpt_dataset",
-    "encode_scgpt_embeddings",
+    "encode_scgpt_embeddings_to_h5ad",
+    "load_average_gene_embeddings",
+    "load_cls_embeddings",
+    "load_gene_embeddings",
+    "load_gene_names",
+    "load_scgpt_embeddings",
     "load_scgpt_model",
 ]
