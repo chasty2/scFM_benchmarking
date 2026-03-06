@@ -6,9 +6,6 @@ from pathlib import Path
 
 import numpy as np
 
-REGULATION_LABELS = {"Activation": 0, "Repression": 1, "Unknown": 2}
-REGULATION_LABEL_NAMES = {v: k for k, v in REGULATION_LABELS.items()}
-
 BINARY_LABELS = {"None": 0, "Relationship": 1}
 BINARY_LABEL_NAMES = {v: k for k, v in BINARY_LABELS.items()}
 
@@ -45,37 +42,6 @@ class TRRUSTData:
     def labels(self) -> np.ndarray:
         return np.array([r.label for r in self.records], dtype=np.int64)
 
-
-def load_trrust_data(
-    tsv_path: str | Path,
-    gene_embeddings: dict[str, np.ndarray],
-) -> TRRUSTData:
-    """Load TRRUST TSV and create training data from gene embeddings.
-
-    Args:
-        tsv_path: Path to the TRRUST TSV file.
-        gene_embeddings: Mapping of gene name to embedding vector.
-
-    Returns:
-        TRRUSTData containing one TRRUSTRecord per valid (TF, target) pair.
-    """
-    raw_records = _parse_tsv(Path(tsv_path))
-    deduped = _deduplicate(raw_records)
-
-    records = []
-    for tf, target, regulation in deduped:
-        if tf in gene_embeddings and target in gene_embeddings:
-            records.append(
-                TRRUSTRecord(
-                    tf=tf,
-                    tf_embedding=gene_embeddings[tf],
-                    target=target,
-                    target_embedding=gene_embeddings[target],
-                    label=REGULATION_LABELS[regulation],
-                )
-            )
-
-    return TRRUSTData(records=records)
 
 
 def _parse_tsv(tsv_path: Path) -> list[tuple[str, str, str]]:
