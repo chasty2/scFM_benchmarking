@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import anndata
@@ -14,26 +13,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from scfm_utils.constants import PAD_TOKEN
-
-
-@dataclass
-class ScGPTEmbeddings:
-    cls_embeddings: np.ndarray  # (n_cells, embsize)
-    gene_embeddings: np.ndarray  # (n_cells, n_genes, embsize)
-    gene_names: list[str]  # length n_genes
-    cell_types: np.ndarray  # (n_cells,) cell type labels
-
-    def average_gene_embeddings(self) -> dict[str, np.ndarray]:
-        """Average gene embeddings per cell type.
-
-        Returns:
-            Dict mapping each cell type to an (n_genes, embsize) array.
-        """
-        unique_cell_types = np.unique(self.cell_types)
-        return {
-            cell_type: self.gene_embeddings[self.cell_types == cell_type].mean(axis=0)
-            for cell_type in unique_cell_types
-        }
 
 
 def encode_scgpt_embeddings_to_h5ad(
@@ -173,26 +152,6 @@ def _read_cell_types(obs_group: h5py.Group) -> np.ndarray:
             [x.decode() if isinstance(x, bytes) else str(x) for x in cell_types]
         )
     return cell_types
-
-
-def load_scgpt_embeddings(path: str | Path) -> ScGPTEmbeddings:
-    """Load full embeddings from h5ad into ScGPTEmbeddings.
-
-    Note: This loads gene_embeddings entirely into RAM. For large datasets,
-    prefer load_cls_embeddings() and load_average_gene_embeddings().
-    """
-    with h5py.File(path, "r") as h5f:
-        cls_embs = h5f["X"][:]
-        gene_embs = h5f["embeddings"]["gene"][:]
-        gene_names = list(h5f["uns"]["gene_names"][:])
-        cell_types = _read_cell_types(h5f["obs"])
-    gene_names = [g.decode() if isinstance(g, bytes) else str(g) for g in gene_names]
-    return ScGPTEmbeddings(
-        cls_embeddings=cls_embs,
-        gene_embeddings=gene_embs,
-        gene_names=gene_names,
-        cell_types=cell_types,
-    )
 
 
 def load_cls_embeddings(path: str | Path) -> anndata.AnnData:
