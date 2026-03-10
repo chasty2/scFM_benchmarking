@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from scfm_utils.constants import N_HVG, SPECIAL_TOKENS
 from scfm_utils.scgpt import (
     ScGPTDataset,
-    ScGPTEmbeddings,
     ScGPTModelBundle,
     create_scgpt_dataset,
     encode_scgpt_embeddings_to_h5ad,
@@ -25,7 +24,6 @@ from scfm_utils.scgpt import (
     load_cls_embeddings,
     load_gene_embeddings,
     load_gene_names,
-    load_scgpt_embeddings,
     load_scgpt_model,
 )
 
@@ -135,29 +133,6 @@ class TestScGPTIO:
     def test_encoding_complete(self, h5ad_path):
         with h5py.File(h5ad_path, "r") as h5f:
             assert h5f.attrs["encoding_complete"] == True
-
-    def test_load_scgpt_embeddings_types(self, h5ad_path):
-        embs = load_scgpt_embeddings(h5ad_path)
-        assert isinstance(embs, ScGPTEmbeddings)
-        assert isinstance(embs.cls_embeddings, np.ndarray)
-        assert isinstance(embs.gene_embeddings, np.ndarray)
-        assert isinstance(embs.gene_names, list)
-        assert isinstance(embs.cell_types, np.ndarray)
-
-    def test_load_scgpt_embeddings_shapes(self, h5ad_path, model_bundle, scgpt_dataset):
-        embs = load_scgpt_embeddings(h5ad_path)
-        embsize = model_bundle.config["embsize"]
-        n_genes = len(scgpt_dataset.genes_in_vocab)
-
-        assert embs.cls_embeddings.shape == (MAX_CELLS, embsize)
-        assert embs.gene_embeddings.shape == (MAX_CELLS, n_genes, embsize)
-        assert len(embs.gene_names) == n_genes
-        assert embs.cell_types.shape == (MAX_CELLS,)
-
-    def test_load_scgpt_embeddings_finite(self, h5ad_path):
-        embs = load_scgpt_embeddings(h5ad_path)
-        assert np.all(np.isfinite(embs.cls_embeddings))
-        assert np.all(np.isfinite(embs.gene_embeddings))
 
     def test_load_cls_embeddings(self, h5ad_path, model_bundle):
         adata = load_cls_embeddings(h5ad_path)
