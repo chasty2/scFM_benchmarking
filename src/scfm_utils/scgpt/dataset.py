@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from anndata import AnnData
@@ -8,7 +9,7 @@ from scgpt.preprocess import Preprocessor
 from scgpt.tokenizer.gene_tokenizer import GeneVocab, tokenize_and_pad_batch
 from torch.utils.data import DataLoader, Dataset
 
-from scfm_utils.constants import N_BINS, N_HVG, PAD_TOKEN, PAD_VALUE
+from scfm_utils.constants import N_BINS, PAD_TOKEN, PAD_VALUE
 
 
 class SeqDataset(Dataset):
@@ -33,11 +34,10 @@ def create_scgpt_dataset(
     vocab: GeneVocab,
     gene2idx: dict[str, int],
     *,
-    n_hvg: int = N_HVG,
     n_bins: int = N_BINS,
     batch_key: str = "batch",
     data_is_raw: bool = False,
-    max_cells: int | None = None,
+    gene_list_file: str | Path | None = None,
     batch_size: int = 64,
 ) -> ScGPTDataset:
     """Preprocess an AnnData object and create a DataLoader for scGPT encoding."""
@@ -50,8 +50,7 @@ def create_scgpt_dataset(
         result_normed_key="X_normed",
         log1p=data_is_raw,
         result_log1p_key="X_log1p",
-        subset_hvg=n_hvg,
-        hvg_flavor="cell_ranger",
+        subset_hvg=False,
         binning=n_bins,
         result_binned_key="X_binned",
     )
@@ -59,6 +58,9 @@ def create_scgpt_dataset(
 
     # Filter genes to those in vocab
     genes_in_vocab = [g for g in adata.var.index if g in gene2idx]
+    if gene_list_file is not None:
+        allowed = set(Path(gene_list_file).read_text().splitlines())
+        genes_in_vocab = [g for g in genes_in_vocab if g in allowed]
     gene_ids = np.array([gene2idx[g] for g in genes_in_vocab])
 
     gene_mask = adata.var.index.isin(genes_in_vocab)
@@ -79,10 +81,6 @@ def create_scgpt_dataset(
         append_cls=True,
         include_zero_gene=True,
     )
-
-    # Optional cell subset
-    if max_cells is not None:
-        tokenized_data = {k: v[:max_cells] for k, v in tokenized_data.items()}
 
     dataset = SeqDataset(tokenized_data)
     dataloader = DataLoader(
