@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import anndata
-import h5py
 import numpy as np
 import pytest
 import scanpy as sc
@@ -14,23 +13,20 @@ from scgpt.model import TransformerModel
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from torch.utils.data import DataLoader
 
-from scfm_utils.constants import N_HVG, SPECIAL_TOKENS
+from scfm_utils.constants import SPECIAL_TOKENS
 from scfm_utils.scgpt import (
     ScGPTDataset,
     ScGPTModelBundle,
     create_scgpt_dataset,
     encode_scgpt_embeddings_to_h5ad,
     load_average_gene_embeddings,
-    load_cls_embeddings,
-    load_gene_embeddings,
-    load_gene_names,
     load_scgpt_model,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = ROOT / "models" / "scGPT_bc"
 DATA_PATH = ROOT / "data" / "Immune_ALL_human.h5ad"
-MAX_CELLS = 256
+GENE_LIST_FILE = ROOT / "data" / "trrust_genes.txt"
 
 
 # ---------------------------------------------------------------------------
@@ -56,21 +52,28 @@ def scgpt_dataset(adata, model_bundle) -> ScGPTDataset:
         adata,
         model_bundle.vocab,
         model_bundle.gene2idx,
-        max_cells=MAX_CELLS,
+        gene_list_file=GENE_LIST_FILE,
     )
 
 
 @pytest.fixture(scope="module")
-def h5ad_path(model_bundle, scgpt_dataset, adata, tmp_path_factory) -> Path:
-    """Encode 256 cells and write to a temporary h5ad file."""
+def h5ad_path(model_bundle, adata, tmp_path_factory) -> Path:
+    """Encode cells of a single cell type and write to a temporary h5ad file."""
     path = tmp_path_factory.mktemp("embeddings") / "test.h5ad"
-    cell_types = np.array(adata.obs["celltype"].values[:MAX_CELLS])
+    cell_type = str(adata.obs["celltype"].iloc[0])
+    adata_ct = adata[adata.obs["celltype"] == cell_type].copy()
+    ds = create_scgpt_dataset(
+        adata_ct,
+        model_bundle.vocab,
+        model_bundle.gene2idx,
+        gene_list_file=GENE_LIST_FILE,
+    )
     encode_scgpt_embeddings_to_h5ad(
         model=model_bundle.model,
-        dataloader=scgpt_dataset.dataloader,
+        dataloader=ds.dataloader,
         vocab=model_bundle.vocab,
-        gene_names=scgpt_dataset.genes_in_vocab,
-        cell_types=cell_types,
+        gene_names=ds.genes_in_vocab,
+        cell_type=cell_type,
         output_path=path,
     )
     return path
@@ -109,8 +112,7 @@ class TestScGPTDataset:
         assert all(isinstance(g, str) for g in scgpt_dataset.genes_in_vocab)
 
     def test_genes_in_vocab_count(self, scgpt_dataset):
-        n = len(scgpt_dataset.genes_in_vocab)
-        assert 0 < n <= N_HVG
+        assert len(scgpt_dataset.genes_in_vocab) > 0
 
     def test_batch_shapes(self, scgpt_dataset):
         batch = next(iter(scgpt_dataset.dataloader))
@@ -130,56 +132,23 @@ class TestScGPTDataset:
 
 
 class TestScGPTIO:
-    def test_encoding_complete(self, h5ad_path):
-        with h5py.File(h5ad_path, "r") as h5f:
-            assert h5f.attrs["encoding_complete"] == True
+    def test_returns_anndata(self, h5ad_path):
+        assert isinstance(load_average_gene_embeddings(h5ad_path), anndata.AnnData)
 
-    def test_load_cls_embeddings(self, h5ad_path, model_bundle):
-        adata = load_cls_embeddings(h5ad_path)
+    def test_shape(self, h5ad_path, model_bundle):
+        result = load_average_gene_embeddings(h5ad_path)
         embsize = model_bundle.config["embsize"]
+        assert result.X.shape == (result.n_obs, embsize)
 
-        assert isinstance(adata, anndata.AnnData)
-        assert adata.X.shape == (MAX_CELLS, embsize)
-        assert "celltype" in adata.obs.columns
-        assert len(adata.obs) == MAX_CELLS
+    def test_obs_names_are_gene_strings(self, h5ad_path):
+        result = load_average_gene_embeddings(h5ad_path)
+        assert len(result.obs_names) > 0
+        assert all(isinstance(g, str) for g in result.obs_names)
 
-    def test_load_gene_embeddings_full(self, h5ad_path, model_bundle, scgpt_dataset):
-        gene_embs = load_gene_embeddings(h5ad_path)
-        embsize = model_bundle.config["embsize"]
-        n_genes = len(scgpt_dataset.genes_in_vocab)
+    def test_cell_type_in_uns(self, h5ad_path, adata):
+        result = load_average_gene_embeddings(h5ad_path)
+        assert "cell_type" in result.uns
+        assert result.uns["cell_type"] == str(adata.obs["celltype"].iloc[0])
 
-        assert gene_embs.shape == (MAX_CELLS, n_genes, embsize)
-        assert np.all(np.isfinite(gene_embs))
-
-    def test_load_gene_embeddings_sliced(self, h5ad_path, scgpt_dataset):
-        sliced = load_gene_embeddings(h5ad_path, cell_indices=slice(0, 5))
-        n_genes = len(scgpt_dataset.genes_in_vocab)
-
-        assert sliced.shape[0] == 5
-        assert sliced.shape[1] == n_genes
-
-    def test_load_gene_names(self, h5ad_path, scgpt_dataset):
-        names = load_gene_names(h5ad_path)
-        assert names == scgpt_dataset.genes_in_vocab
-        assert all(isinstance(g, str) for g in names)
-
-    def test_load_average_gene_embeddings(self, h5ad_path, model_bundle, scgpt_dataset, adata):
-        avgs, gene_names = load_average_gene_embeddings(h5ad_path)
-        embsize = model_bundle.config["embsize"]
-        n_genes = len(scgpt_dataset.genes_in_vocab)
-        cell_types = np.array(adata.obs["celltype"].values[:MAX_CELLS])
-        expected_types = set(np.unique(cell_types))
-
-        assert isinstance(avgs, dict)
-        assert set(avgs.keys()) == expected_types
-        assert gene_names == scgpt_dataset.genes_in_vocab
-
-        for ct, emb in avgs.items():
-            assert emb.shape == (n_genes, embsize)
-            assert np.all(np.isfinite(emb))
-
-    def test_average_gene_embeddings_uses_fast_path(self, h5ad_path):
-        """Verify pre-computed averages exist in the file."""
-        with h5py.File(h5ad_path, "r") as h5f:
-            assert "gene_avg" in h5f["embeddings"]
-            assert "gene_avg_cell_types" in h5f["embeddings"]
+    def test_embeddings_are_finite(self, h5ad_path):
+        assert np.all(np.isfinite(load_average_gene_embeddings(h5ad_path).X))
