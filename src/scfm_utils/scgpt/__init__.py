@@ -2,9 +2,6 @@ from scfm_utils.scgpt.dataset import ScGPTDataset, SeqDataset, create_scgpt_data
 from scfm_utils.scgpt.encode import (
     encode_scgpt_embeddings_to_h5ad,
     load_average_gene_embeddings,
-    load_cls_embeddings,
-    load_gene_embeddings,
-    load_gene_names,
 )
 from scfm_utils.scgpt.model import ScGPTModelBundle, load_scgpt_model
 
@@ -15,8 +12,5 @@ __all__ = [
     "create_scgpt_dataset",
     "encode_scgpt_embeddings_to_h5ad",
     "load_average_gene_embeddings",
-    "load_cls_embeddings",
-    "load_gene_embeddings",
-    "load_gene_names",
     "load_scgpt_model",
 ]
