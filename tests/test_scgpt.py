@@ -13,8 +13,8 @@ from scgpt.model import TransformerModel
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from torch.utils.data import DataLoader
 
-from scfm_utils.constants import SPECIAL_TOKENS
-from scfm_utils.scgpt import (
+from src.constants import SPECIAL_TOKENS
+from src.scgpt import (
     ScGPTDataset,
     ScGPTModelBundle,
     create_scgpt_dataset,

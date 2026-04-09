@@ -8,14 +8,14 @@ import numpy as np
 import pytest
 import torch
 
-from scfm_utils.trrust import (
+from src.trrust import (
     BINARY_LABELS,
     TERNARY_LABELS,
     TRRClassifierModel,
     load_binary_trrust_data,
     load_ternary_trrust_data,
 )
-from scfm_utils.trrust.training_data import (
+from src.trrust.training_data import (
     _collect_raw_pairs,
     _deduplicate,
     _generate_none_pairs,
