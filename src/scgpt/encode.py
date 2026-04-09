@@ -11,7 +11,7 @@ from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from scfm_utils.constants import PAD_TOKEN
+from src.constants import PAD_TOKEN
 
 
 def encode_scgpt_embeddings_to_h5ad(

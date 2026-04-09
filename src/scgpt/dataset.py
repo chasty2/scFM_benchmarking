@@ -9,7 +9,7 @@ from scgpt.preprocess import Preprocessor
 from scgpt.tokenizer.gene_tokenizer import GeneVocab, tokenize_and_pad_batch
 from torch.utils.data import DataLoader, Dataset
 
-from scfm_utils.constants import N_BINS, PAD_TOKEN, PAD_VALUE
+from src.constants import N_BINS, PAD_TOKEN, PAD_VALUE
 
 
 class SeqDataset(Dataset):

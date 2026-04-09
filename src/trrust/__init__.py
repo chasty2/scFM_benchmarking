@@ -1,5 +1,5 @@
-from scfm_utils.trrust.classifier import TRRClassifierModel
-from scfm_utils.trrust.training_data import (
+from src.trrust.classifier import TRRClassifierModel
+from src.trrust.training_data import (
     BINARY_LABEL_NAMES,
     BINARY_LABELS,
     TERNARY_LABEL_NAMES,

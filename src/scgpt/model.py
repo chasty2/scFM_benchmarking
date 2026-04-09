@@ -9,7 +9,7 @@ import torch
 from scgpt.model import TransformerModel
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 
-from scfm_utils.constants import N_BINS, PAD_VALUE, SPECIAL_TOKENS
+from src.constants import N_BINS, PAD_VALUE, SPECIAL_TOKENS
 
 logger = logging.getLogger(__name__)
 

@@ -3,6 +3,14 @@ Benchmarking gene embeddings from single cell foundation models to evaluate thei
 
 ## System Dependencies
 
+### uv
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 ### Geneformer
 
 Geneformer requires the following system-level packages:
@@ -14,6 +22,12 @@ git lfs install
 
 - `python3-dev`: Provides Python C headers needed to compile native extensions
 - `git-lfs`: Required to pull the large model weight files from Hugging Face
+
+## Installation
+
+```bash
+uv sync
+```
 
 ## Testing
 
