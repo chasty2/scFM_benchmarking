@@ -43,8 +43,8 @@ PREPARED_ADATA = _REPO_ROOT / "data/geneformer_prep/Immune_ALL_human.h5ad"
 MODEL_NAME = "ctheodoris/Geneformer"
 CELL_TYPE = "NKT cells"
 CHUNK_SIZE = 50
-CHUNKS_DIR = _REPO_ROOT / "data/geneformer_output/cd20_chunks"
-OUTPUT_H5AD = _REPO_ROOT / "data/embeddings/geneformer_cd20.h5ad"
+CHUNKS_DIR = _REPO_ROOT / "data/geneformer_output/nkt_chunks"
+OUTPUT_H5AD = _REPO_ROOT / "data/embeddings/geneformer_nkt.h5ad"
 
 # EmbExtractor settings — match the prototype notebook.
 FORWARD_BATCH_SIZE = 2
