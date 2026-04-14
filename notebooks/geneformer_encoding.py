@@ -53,7 +53,7 @@ SUMMARY_STAT = "mean"
 
 # Smoke-test cap. Set to ``None`` for a full run; e.g. ``2`` to encode only the
 # first two chunks end-to-end.
-MAX_CHUNKS: int | None = 2
+MAX_CHUNKS: int | None = None
 
 
 def main() -> None:
