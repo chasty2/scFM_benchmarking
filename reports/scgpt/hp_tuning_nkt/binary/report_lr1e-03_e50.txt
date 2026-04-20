@@ -1,0 +1,52 @@
+=== Fold 1 ===
+              precision    recall  f1-score   support
+
+        None       1.00      0.12      0.21       791
+Relationship       0.53      1.00      0.69       791
+
+    accuracy                           0.56      1582
+   macro avg       0.77      0.56      0.45      1582
+weighted avg       0.77      0.56      0.45      1582
+
+=== Fold 2 ===
+              precision    recall  f1-score   support
+
+        None       0.56      0.98      0.71       791
+Relationship       0.91      0.23      0.37       791
+
+    accuracy                           0.60      1582
+   macro avg       0.73      0.60      0.54      1582
+weighted avg       0.73      0.60      0.54      1582
+
+=== Fold 3 ===
+              precision    recall  f1-score   support
+
+        None       0.70      0.86      0.77       791
+Relationship       0.82      0.64      0.72       791
+
+    accuracy                           0.75      1582
+   macro avg       0.76      0.75      0.74      1582
+weighted avg       0.76      0.75      0.74      1582
+
+=== Fold 4 ===
+              precision    recall  f1-score   support
+
+        None       0.51      1.00      0.68       790
+Relationship       0.98      0.06      0.11       791
+
+    accuracy                           0.53      1581
+   macro avg       0.75      0.53      0.40      1581
+weighted avg       0.75      0.53      0.40      1581
+
+=== Fold 5 ===
+              precision    recall  f1-score   support
+
+        None       1.00      0.00      0.00       791
+Relationship       0.50      1.00      0.67       790
+
+    accuracy                           0.50      1581
+   macro avg       0.75      0.50      0.33      1581
+weighted avg       0.75      0.50      0.33      1581
+
+Mean accuracy: 0.588 ± 0.087
+Mean macro F1: 0.493 ± 0.142
