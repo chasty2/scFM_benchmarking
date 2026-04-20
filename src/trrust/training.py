@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.trrust.classifier import TRRClassifierModel
@@ -23,6 +23,17 @@ class TrainingResult:
     test_losses: list[float]
     classification_report: dict
     gene_predictions: pd.DataFrame
+
+
+@dataclass
+class CrossValidationResult:
+    """Outputs of a stratified K-fold CV run of a TRRUST classifier."""
+
+    per_fold: list[TrainingResult]
+    fold_accuracies: list[float]
+    aggregate_classification_report: dict
+    aggregate_predictions: pd.DataFrame
+    config: dict
 
 
 def load_gene_embeddings(h5ad_path: str | Path) -> dict[str, np.ndarray]:
@@ -172,4 +183,106 @@ def train_classifier(
         test_losses=test_losses,
         classification_report=report,
         gene_predictions=predictions_df,
+    )
+
+
+def cross_validate(
+    data: TRRUSTData,
+    *,
+    embsize: int,
+    label_map: dict[str, int],
+    lr: float,
+    epochs: int,
+    batch_size: int = 64,
+    use_class_weights: bool = False,
+    n_splits: int = 5,
+    device: str | torch.device | None = None,
+    seed: int = 42,
+) -> CrossValidationResult:
+    """Stratified K-fold CV over a ``TRRUSTData`` object.
+
+    For each fold, build per-fold TensorDatasets and test_metadata the same way
+    ``prepare_train_test_split`` does, delegate training to ``train_classifier``,
+    then pool all fold test predictions for an aggregate classification report.
+    """
+    tf_tensor = torch.from_numpy(data.tf_embeddings).float()
+    tgt_tensor = torch.from_numpy(data.target_embeddings).float()
+    label_tensor = torch.from_numpy(data.labels).long()
+    labels_np = data.labels
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    label_names = {v: k for k, v in label_map.items()}
+    n_classes = len(label_map)
+
+    per_fold: list[TrainingResult] = []
+    fold_accuracies: list[float] = []
+    pooled_predictions: list[pd.DataFrame] = []
+
+    for fold, (train_idx, test_idx) in enumerate(
+        skf.split(np.zeros(len(labels_np)), labels_np)
+    ):
+        train_ds = TensorDataset(
+            tf_tensor[train_idx], tgt_tensor[train_idx], label_tensor[train_idx]
+        )
+        test_ds = TensorDataset(
+            tf_tensor[test_idx], tgt_tensor[test_idx], label_tensor[test_idx]
+        )
+        test_metadata = pd.DataFrame(
+            {
+                "tf": [data.records[i].tf for i in test_idx],
+                "target": [data.records[i].target for i in test_idx],
+            }
+        )
+
+        fold_result = train_classifier(
+            train_ds,
+            test_ds,
+            test_metadata,
+            embsize=embsize,
+            label_map=label_map,
+            lr=lr,
+            epochs=epochs,
+            batch_size=batch_size,
+            use_class_weights=use_class_weights,
+            device=device,
+            seed=seed,
+        )
+        per_fold.append(fold_result)
+
+        preds_df = fold_result.gene_predictions.copy()
+        preds_df["fold"] = fold
+        pooled_predictions.append(preds_df)
+
+        correct = (
+            preds_df["true_relationship"] == preds_df["predicted_relationship"]
+        ).mean()
+        fold_accuracies.append(float(correct))
+
+    aggregate_predictions = pd.concat(pooled_predictions, ignore_index=True)
+    true_ids = aggregate_predictions["true_relationship"].map(label_map).to_numpy()
+    pred_ids = aggregate_predictions["predicted_relationship"].map(label_map).to_numpy()
+    target_names = [label_names[i] for i in range(n_classes)]
+    aggregate_report = classification_report(
+        true_ids,
+        pred_ids,
+        target_names=target_names,
+        output_dict=True,
+        zero_division=0,
+    )
+
+    config = {
+        "lr": lr,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "use_class_weights": use_class_weights,
+        "n_splits": n_splits,
+        "seed": seed,
+    }
+
+    return CrossValidationResult(
+        per_fold=per_fold,
+        fold_accuracies=fold_accuracies,
+        aggregate_classification_report=aggregate_report,
+        aggregate_predictions=aggregate_predictions,
+        config=config,
     )

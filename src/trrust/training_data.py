@@ -174,6 +174,16 @@ def load_binary_trrust_data(
     return TRRUSTData(records=relationship_records + none_records)
 
 
+def filter_data_by_genes(
+    data: TRRUSTData,
+    genes: set[str] | list[str],
+) -> TRRUSTData:
+    """Return a new TRRUSTData keeping only records where both TF and target are in ``genes``."""
+    gene_set = set(genes)
+    kept = [r for r in data.records if r.tf in gene_set and r.target in gene_set]
+    return TRRUSTData(records=kept)
+
+
 def load_ternary_trrust_data(
     tsv_path: str | Path,
     gene_embeddings: dict[str, np.ndarray],
