@@ -1,9 +1,0 @@
-              precision    recall  f1-score   support
-
-  Activation       0.00      0.00      0.00       127
-  Repression       0.27      1.00      0.42        83
-        None       1.00      0.03      0.06       105
-
-    accuracy                           0.27       315
-   macro avg       0.42      0.34      0.16       315
-weighted avg       0.40      0.27      0.13       315
