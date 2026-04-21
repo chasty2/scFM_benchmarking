@@ -12,6 +12,10 @@ from src.trrust import (
     BINARY_LABELS,
     TERNARY_LABELS,
     TRRClassifierModel,
+    TRRUSTData,
+    TRRUSTRecord,
+    cross_validate,
+    filter_data_by_genes,
     load_binary_trrust_data,
     load_ternary_trrust_data,
 )
@@ -206,3 +210,119 @@ class TestLoadTernaryTrrustData:
         pairs1 = [(r.tf, r.target) for r in d1.records]
         pairs2 = [(r.tf, r.target) for r in d2.records]
         assert pairs1 == pairs2
+
+
+def _synthetic_trrust_data(
+    rng: np.random.Generator,
+    n_per_class: int,
+    n_classes: int,
+) -> TRRUSTData:
+    records = []
+    for label in range(n_classes):
+        for i in range(n_per_class):
+            records.append(
+                TRRUSTRecord(
+                    tf=f"TF{label}_{i}",
+                    tf_embedding=rng.standard_normal(EMBSIZE).astype(np.float32),
+                    target=f"TGT{label}_{i}",
+                    target_embedding=rng.standard_normal(EMBSIZE).astype(np.float32),
+                    label=label,
+                )
+            )
+    return TRRUSTData(records=records)
+
+
+class TestFilterDataByGenes:
+    def test_keeps_only_allowed_pairs(self, tsv_path, gene_embeddings):
+        data = load_binary_trrust_data(tsv_path, gene_embeddings)
+        allowed = {"ABL1", "BAX", "BCL2"}
+        filtered = filter_data_by_genes(data, allowed)
+        for rec in filtered.records:
+            assert rec.tf in allowed
+            assert rec.target in allowed
+
+    def test_drops_pairs_with_one_missing_gene(self):
+        rng = np.random.default_rng(0)
+        emb = lambda: rng.standard_normal(EMBSIZE).astype(np.float32)
+        data = TRRUSTData(records=[
+            TRRUSTRecord(tf="A", tf_embedding=emb(), target="B", target_embedding=emb(), label=0),
+            TRRUSTRecord(tf="A", tf_embedding=emb(), target="C", target_embedding=emb(), label=1),
+            TRRUSTRecord(tf="D", tf_embedding=emb(), target="B", target_embedding=emb(), label=0),
+        ])
+        filtered = filter_data_by_genes(data, {"A", "B"})
+        kept = {(r.tf, r.target) for r in filtered.records}
+        assert kept == {("A", "B")}
+
+    def test_accepts_list_or_set(self, tsv_path, gene_embeddings):
+        data = load_binary_trrust_data(tsv_path, gene_embeddings)
+        as_list = filter_data_by_genes(data, ["ABL1", "BAX"])
+        as_set = filter_data_by_genes(data, {"ABL1", "BAX"})
+        assert len(as_list.records) == len(as_set.records)
+
+    def test_returns_new_object(self, tsv_path, gene_embeddings):
+        data = load_binary_trrust_data(tsv_path, gene_embeddings)
+        original_len = len(data.records)
+        filter_data_by_genes(data, {"ABL1"})
+        assert len(data.records) == original_len
+
+
+class TestCrossValidate:
+    def test_produces_n_fold_results(self):
+        rng = np.random.default_rng(0)
+        data = _synthetic_trrust_data(rng, n_per_class=20, n_classes=2)
+        result = cross_validate(
+            data,
+            embsize=EMBSIZE,
+            label_map=BINARY_LABELS,
+            lr=1e-3,
+            epochs=2,
+            batch_size=8,
+            n_splits=5,
+            device="cpu",
+            seed=0,
+        )
+        assert len(result.per_fold) == 5
+        assert len(result.fold_accuracies) == 5
+
+    def test_predictions_cover_every_record_once(self):
+        rng = np.random.default_rng(1)
+        data = _synthetic_trrust_data(rng, n_per_class=20, n_classes=2)
+        result = cross_validate(
+            data,
+            embsize=EMBSIZE,
+            label_map=BINARY_LABELS,
+            lr=1e-3,
+            epochs=2,
+            batch_size=8,
+            n_splits=5,
+            device="cpu",
+            seed=0,
+        )
+        assert len(result.aggregate_predictions) == len(data.records)
+        support = result.aggregate_classification_report["macro avg"]["support"]
+        assert support == len(data.records)
+
+    def test_config_recorded(self):
+        rng = np.random.default_rng(2)
+        data = _synthetic_trrust_data(rng, n_per_class=15, n_classes=3)
+        result = cross_validate(
+            data,
+            embsize=EMBSIZE,
+            label_map=TERNARY_LABELS,
+            lr=5e-4,
+            epochs=3,
+            batch_size=8,
+            use_class_weights=True,
+            n_splits=3,
+            device="cpu",
+            seed=7,
+        )
+        assert result.config == {
+            "lr": 5e-4,
+            "epochs": 3,
+            "batch_size": 8,
+            "use_class_weights": True,
+            "n_splits": 3,
+            "seed": 7,
+        }
+        assert set(result.aggregate_predictions["fold"].unique()) == {0, 1, 2}

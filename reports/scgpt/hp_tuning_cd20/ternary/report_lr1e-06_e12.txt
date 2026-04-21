@@ -1,0 +1,57 @@
+=== Fold 1 ===
+              precision    recall  f1-score   support
+
+  Activation       0.38      0.31      0.34       253
+  Repression       0.23      0.28      0.25       167
+        None       0.35      0.38      0.37       210
+
+    accuracy                           0.32       630
+   macro avg       0.32      0.32      0.32       630
+weighted avg       0.33      0.32      0.33       630
+
+=== Fold 2 ===
+              precision    recall  f1-score   support
+
+  Activation       0.38      0.35      0.37       253
+  Repression       0.25      0.28      0.27       167
+        None       0.32      0.32      0.32       210
+
+    accuracy                           0.32       630
+   macro avg       0.32      0.32      0.32       630
+weighted avg       0.33      0.32      0.33       630
+
+=== Fold 3 ===
+              precision    recall  f1-score   support
+
+  Activation       0.35      0.15      0.21       253
+  Repression       0.24      0.41      0.30       167
+        None       0.37      0.41      0.39       209
+
+    accuracy                           0.31       629
+   macro avg       0.32      0.33      0.30       629
+weighted avg       0.33      0.31      0.30       629
+
+=== Fold 4 ===
+              precision    recall  f1-score   support
+
+  Activation       0.45      0.23      0.30       253
+  Repression       0.28      0.48      0.35       166
+        None       0.41      0.42      0.42       210
+
+    accuracy                           0.36       629
+   macro avg       0.38      0.38      0.36       629
+weighted avg       0.39      0.36      0.35       629
+
+=== Fold 5 ===
+              precision    recall  f1-score   support
+
+  Activation       0.44      0.34      0.38       253
+  Repression       0.22      0.33      0.26       166
+        None       0.34      0.30      0.32       210
+
+    accuracy                           0.32       629
+   macro avg       0.33      0.32      0.32       629
+weighted avg       0.35      0.32      0.33       629
+
+Mean accuracy: 0.328 ± 0.017
+Mean macro F1: 0.324 ± 0.018

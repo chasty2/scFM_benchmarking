@@ -1,6 +1,8 @@
 from src.trrust.classifier import TRRClassifierModel
 from src.trrust.training import (
+    CrossValidationResult,
     TrainingResult,
+    cross_validate,
     load_gene_embeddings,
     prepare_train_test_split,
     train_classifier,
@@ -12,6 +14,7 @@ from src.trrust.training_data import (
     TERNARY_LABELS,
     TRRUSTData,
     TRRUSTRecord,
+    filter_data_by_genes,
     load_binary_trrust_data,
     load_ternary_trrust_data,
 )
@@ -19,12 +22,15 @@ from src.trrust.training_data import (
 __all__ = [
     "BINARY_LABEL_NAMES",
     "BINARY_LABELS",
+    "CrossValidationResult",
     "TERNARY_LABEL_NAMES",
     "TERNARY_LABELS",
     "TRRClassifierModel",
     "TRRUSTData",
     "TRRUSTRecord",
     "TrainingResult",
+    "cross_validate",
+    "filter_data_by_genes",
     "load_binary_trrust_data",
     "load_gene_embeddings",
     "load_ternary_trrust_data",
