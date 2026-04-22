@@ -14,8 +14,10 @@ from src.trrust import (
     TRRClassifierModel,
     TRRUSTData,
     TRRUSTRecord,
+    count_relationship_pairs,
     cross_validate,
     filter_data_by_genes,
+    generate_shared_none_pairs,
     load_binary_trrust_data,
     load_ternary_trrust_data,
 )
@@ -230,6 +232,104 @@ def _synthetic_trrust_data(
                 )
             )
     return TRRUSTData(records=records)
+
+
+class TestGenerateSharedNonePairs:
+    def test_pairs_only_use_intersection(self, tsv_path):
+        vocab_a = {"ABL1", "BAX", "BCL2", "MYC", "TP53"}
+        vocab_b = {"ABL1", "BAX", "BCL2", "MYC"}  # excludes TP53
+        pairs = generate_shared_none_pairs(tsv_path, [vocab_a, vocab_b], n=5, seed=0)
+        allowed = vocab_a & vocab_b
+        for tf, target in pairs:
+            assert tf in allowed
+            assert target in allowed
+
+    def test_deterministic(self, tsv_path):
+        vocabs = [{"ABL1", "BAX", "BCL2", "MYC", "TP53"}]
+        p1 = generate_shared_none_pairs(tsv_path, vocabs, n=4, seed=7)
+        p2 = generate_shared_none_pairs(tsv_path, vocabs, n=4, seed=7)
+        assert p1 == p2
+
+    def test_different_vocabs_yield_different_pairs(self, tsv_path):
+        full = [{"ABL1", "BAX", "BCL2", "MYC", "TP53"}]
+        narrower = [{"ABL1", "BAX", "BCL2", "MYC", "TP53"}, {"ABL1", "BAX", "BCL2", "MYC"}]
+        p_full = generate_shared_none_pairs(tsv_path, full, n=3, seed=7)
+        p_narrow = generate_shared_none_pairs(tsv_path, narrower, n=3, seed=7)
+        assert p_full != p_narrow
+
+    def test_no_overlap_with_raw_pairs(self, tsv_path):
+        vocabs = [{"ABL1", "BAX", "BCL2", "MYC", "TP53"}]
+        raw = _parse_tsv(tsv_path)
+        raw_pairs = _collect_raw_pairs(raw)
+        pairs = generate_shared_none_pairs(tsv_path, vocabs, n=10, seed=0)
+        for pair in pairs:
+            assert pair not in raw_pairs
+
+    def test_raises_when_not_enough_candidates(self, tsv_path):
+        vocabs = [{"ABL1", "BAX"}]  # only 2 genes → 2 ordered pairs, both in raw or candidates
+        with pytest.raises(ValueError, match="Not enough candidate"):
+            generate_shared_none_pairs(tsv_path, vocabs, n=100, seed=0)
+
+    def test_empty_vocabularies_raises(self, tsv_path):
+        with pytest.raises(ValueError, match="at least one"):
+            generate_shared_none_pairs(tsv_path, [], n=1, seed=0)
+
+
+class TestCountRelationshipPairs:
+    def test_counts_include_unknown(self, tsv_path):
+        vocab = {"ABL1", "BAX", "BCL2", "MYC", "TP53"}
+        # Deduped pairs with both genes in vocab:
+        # (ABL1,BAX) Activation, (ABL1,BCL2) Repression,
+        # (BCL2,ABL1) Activation, (MYC,TP53) Unknown → 4
+        assert count_relationship_pairs(tsv_path, vocab) == 4
+
+    def test_exclude_unknown(self, tsv_path):
+        vocab = {"ABL1", "BAX", "BCL2", "MYC", "TP53"}
+        assert count_relationship_pairs(tsv_path, vocab, exclude_unknown=True) == 3
+
+    def test_drops_pairs_with_gene_outside_vocab(self, tsv_path):
+        vocab = {"ABL1", "BAX"}  # BCL2 and others excluded
+        # Only (ABL1,BAX) Activation qualifies → 1
+        assert count_relationship_pairs(tsv_path, vocab) == 1
+
+
+class TestLoadersWithSharedNonePairs:
+    def test_binary_uses_provided_none_pairs(self, tsv_path, gene_embeddings):
+        none_pairs = [("BAX", "BCL2"), ("MYC", "ABL1")]
+        data = load_binary_trrust_data(
+            tsv_path, gene_embeddings, none_pairs=none_pairs,
+        )
+        none_records = [r for r in data.records if r.label == BINARY_LABELS["None"]]
+        assert [(r.tf, r.target) for r in none_records] == none_pairs
+        for rec in none_records:
+            np.testing.assert_array_equal(rec.tf_embedding, gene_embeddings[rec.tf])
+            np.testing.assert_array_equal(rec.target_embedding, gene_embeddings[rec.target])
+
+    def test_ternary_uses_provided_none_pairs(self, tsv_path, gene_embeddings):
+        none_pairs = [("BAX", "MYC"), ("TP53", "BCL2"), ("MYC", "BAX")]
+        data = load_ternary_trrust_data(
+            tsv_path, gene_embeddings, none_pairs=none_pairs,
+        )
+        none_records = [r for r in data.records if r.label == TERNARY_LABELS["None"]]
+        assert [(r.tf, r.target) for r in none_records] == none_pairs
+
+    def test_missing_gene_raises(self, tsv_path, gene_embeddings):
+        none_pairs = [("ABL1", "GHOST_GENE")]
+        with pytest.raises(ValueError, match="missing from gene_embeddings"):
+            load_binary_trrust_data(
+                tsv_path, gene_embeddings, none_pairs=none_pairs,
+            )
+
+    def test_same_none_pairs_across_different_embeddings(self, tsv_path):
+        rng = np.random.default_rng(0)
+        emb_a = {g: rng.standard_normal(EMBSIZE) for g in GENE_NAMES}
+        emb_b = {g: rng.standard_normal(EMBSIZE) for g in GENE_NAMES}
+        none_pairs = [("BAX", "MYC"), ("TP53", "BCL2")]
+        da = load_binary_trrust_data(tsv_path, emb_a, none_pairs=none_pairs)
+        db = load_binary_trrust_data(tsv_path, emb_b, none_pairs=none_pairs)
+        none_a = [(r.tf, r.target) for r in da.records if r.label == BINARY_LABELS["None"]]
+        none_b = [(r.tf, r.target) for r in db.records if r.label == BINARY_LABELS["None"]]
+        assert none_a == none_b == none_pairs
 
 
 class TestFilterDataByGenes:
