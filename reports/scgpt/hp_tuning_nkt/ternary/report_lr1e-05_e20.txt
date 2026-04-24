@@ -1,57 +1,57 @@
 === Fold 1 ===
               precision    recall  f1-score   support
 
-  Activation       0.38      0.27      0.31       242
-  Repression       0.28      0.26      0.27       167
-        None       0.41      0.57      0.48       204
+  Activation       0.42      0.70      0.53       242
+  Repression       0.25      0.01      0.02       166
+        None       0.43      0.42      0.43       203
 
-    accuracy                           0.37       613
-   macro avg       0.36      0.37      0.35       613
-weighted avg       0.36      0.37      0.36       613
+    accuracy                           0.42       611
+   macro avg       0.37      0.38      0.33       611
+weighted avg       0.38      0.42      0.36       611
 
 === Fold 2 ===
               precision    recall  f1-score   support
 
-  Activation       0.44      0.19      0.27       242
-  Repression       0.30      0.50      0.37       167
-        None       0.42      0.48      0.44       204
+  Activation       0.43      0.21      0.28       242
+  Repression       0.33      0.47      0.39       166
+        None       0.44      0.56      0.49       203
 
-    accuracy                           0.37       613
-   macro avg       0.39      0.39      0.36       613
-weighted avg       0.40      0.37      0.35       613
+    accuracy                           0.40       611
+   macro avg       0.40      0.41      0.39       611
+weighted avg       0.41      0.40      0.38       611
 
 === Fold 3 ===
               precision    recall  f1-score   support
 
-  Activation       0.47      0.33      0.39       243
-  Repression       0.35      0.42      0.38       166
-        None       0.44      0.53      0.48       204
+  Activation       0.50      0.46      0.48       241
+  Repression       0.36      0.15      0.21       166
+        None       0.40      0.63      0.49       204
 
-    accuracy                           0.42       613
-   macro avg       0.42      0.43      0.42       613
-weighted avg       0.43      0.42      0.42       613
+    accuracy                           0.43       611
+   macro avg       0.42      0.41      0.39       611
+weighted avg       0.43      0.43      0.41       611
 
 === Fold 4 ===
               precision    recall  f1-score   support
 
-  Activation       0.43      0.63      0.51       243
-  Repression       0.29      0.18      0.22       166
-        None       0.43      0.31      0.36       203
+  Activation       0.54      0.39      0.45       241
+  Repression       0.28      0.11      0.16       166
+        None       0.38      0.70      0.49       204
 
-    accuracy                           0.40       612
-   macro avg       0.38      0.37      0.36       612
-weighted avg       0.39      0.40      0.38       612
+    accuracy                           0.42       611
+   macro avg       0.40      0.40      0.37       611
+weighted avg       0.42      0.42      0.39       611
 
 === Fold 5 ===
               precision    recall  f1-score   support
 
-  Activation       0.56      0.22      0.31       243
-  Repression       0.29      0.54      0.37       166
-        None       0.43      0.43      0.43       203
+  Activation       0.49      0.25      0.33       242
+  Repression       0.31      0.49      0.38       165
+        None       0.40      0.45      0.42       204
 
-    accuracy                           0.38       612
-   macro avg       0.43      0.40      0.37       612
-weighted avg       0.44      0.38      0.37       612
+    accuracy                           0.38       611
+   macro avg       0.40      0.40      0.38       611
+weighted avg       0.41      0.38      0.38       611
 
-Mean accuracy: 0.388 ± 0.022
-Mean macro F1: 0.374 ± 0.023
+Mean accuracy: 0.409 ± 0.018
+Mean macro F1: 0.371 ± 0.024
