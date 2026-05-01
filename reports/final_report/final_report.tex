@@ -1,0 +1,549 @@
+%% Based on the LaTeX 'report' class
+%% -----------------------------------------------
+
+\documentclass[12pt, letterpaper]{report}
+
+%% ---- Packages ----
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}                   % Modern font family
+\usepackage[margin=1in]{geometry}       % 1-inch margins
+\usepackage{setspace}                   % Line spacing control
+\usepackage{graphicx}                   % Images
+\usepackage{amsmath, amssymb, amsthm}   % Math support
+\usepackage{algorithm2e}                % Algorithm typesetting
+\usepackage{booktabs}                   % Professional tables
+\usepackage{hyperref}                   % Clickable links
+\usepackage{cleveref}                   % Smart cross-references
+\usepackage{caption}                    % Caption customization
+\usepackage{subcaption}                 % Subfigures
+\usepackage{listings}                   % Code listings
+\usepackage{xcolor}                     % Colors
+\usepackage[numbers]{natbib}            % Bibliography (numeric style)
+\usepackage{appendix}                   % Appendix support
+
+%% ---- Hyperlink styling ----
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=green!50!black,
+    urlcolor=blue!70!black
+}
+
+%% ---- Code listing style ----
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{red!60!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    frame=single,
+    breaklines=true,
+    captionpos=b
+}
+
+%% ---- Theorem environments ----
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+%% ---- Spacing ----
+\onehalfspacing  % 1.5 line spacing (common for theses/projects)
+
+%% ---- Remove "Chapter N" from chapter heading ----
+\makeatletter
+\renewcommand{\@makechapterhead}[1]{%
+  \vspace*{50pt}%
+  {\parindent 0pt \raggedright
+   \bfseries\Huge \thechapter\quad #1
+   \par\nobreak\vskip 40pt}}
+\makeatother
+
+% %% ---- Start new page for each section ----
+\let\oldsection\section
+\renewcommand{\section}{\clearpage\oldsection}
+
+%% ---- Metadata ----
+\newcommand{\doctitle}{Benchmarking Single-cell Foundation Models for Gene Regulatory Network Prediction}
+\newcommand{\authorname}{Cody Hasty}
+\newcommand{\uin}{663068521}
+\newcommand{\university}{University of Illinois at Chicago}
+\newcommand{\department}{Department of Computer Science}
+\newcommand{\advisor}{Dr.\ Hao Chen}
+\newcommand{\secondadvisor}{Dr.\ Shweta Yadav}
+\newcommand{\degreename}{Master of Science}
+\newcommand{\submitdate}{Spring 2026}
+
+
+%% ===========================================================
+\begin{document}
+
+%% ---- Cover Page ----
+\begin{titlepage}
+    \centering
+    \vspace*{1in}
+
+    {\Large \university}\\[0.3cm]
+    {\large \department}\\[2cm]
+
+    \rule{\textwidth}{0.4pt}\\[0.4cm]
+    {\LARGE \bfseries \doctitle}\\[0.3cm]
+    \rule{\textwidth}{0.4pt}\\[2cm]
+
+    {\Large \authorname}\\[0.25cm]
+    {\large \uin}\\[0.25cm]
+    {\large \submitdate}\\[2cm]
+
+    {\large Advisor: \advisor}\\[0.5cm]
+    {\large Committee: \secondadvisor}\\[1.5cm]
+
+    \vfill
+\end{titlepage}
+
+
+%% ---- Front Matter (roman numerals) ----
+\pagenumbering{roman}
+
+%% ---- Table of Contents ----
+\tableofcontents
+% \listoffigures    % Remove if not needed
+% \listoftables     % Remove if not needed
+
+%% ---- Acknowledgments ----
+\chapter*{Acknowledgments}
+\addcontentsline{toc}{chapter}{Acknowledgments}
+
+This project marks the end of a very long journey. It is dedicated to everyone who believed in me along the way, especially when I did not
+
+
+%% ---- Abstract ----
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Recent advances in single-cell transcriptomics have enabled the measurement of gene expression at the resolution of individual cells, providing unprecedented insight into cellular heterogeneity, developmental trajectories, and responses to perturbations. Alongside these experimental advances, a new class of machine learning (ML) models—single-cell foundation models (scFMs)—has emerged \cite{scFM_survey}.
+
+The purpose of this investigation is to evaluate how well scFMs represent relationships between genes. To do this, we trained simple classifier models from the outputs of two different scFMs: scGPT \cite{cui2023scGPT} and Geneformer \cite{geneformer}. The predictive accuracy of these models was benchmarked against known ground truths of transcriptional regulatory relationships using the TRRUST database \cite{trrust}. These models showed promise in predicting high-level relationships between genes (``Relationship'' vs. ``No Relationship''), but struggled to predict more nuanced relationships (``Activation'' vs. ``Repression'' vs. ``None''). Future work to train classifiers on larger datasets and fine-tuned scFM could potentially improve model performance.
+
+With higher performance, scFM could feasibly be used to estimate, possibly even discover, unknown relationships between genes. A secondary goal of this investigation is to explore the computational feasibility of learning and using scFM gene embeddings. While restrictive, all computational work was done on a single self-hosted machine with 64GB RAM and 6GB vRAM. The scFMs used here varied in their resource use and difficulty to setup, but overall were reasonably practical to implement on limited resources.
+
+
+%% ---- Main Matter (arabic numerals) ----
+\cleardoublepage
+\pagenumbering{arabic}
+
+%% -----------------------------------------------
+\chapter{Introduction}
+\label{ch:introduction}
+
+\section{Background Info}
+
+\subsection{Gene Regulatory Networks}
+
+Gene Regulatory Networks (GRN) model how a cell regulates the expression of genes, and subsequently proteins, to control its behavior. This regulation is done through transcription factors (TF), which can activate and/or repress gene expression in numerous ways across one or many genes per TF. This network of interconnected TF and their target genes is incredibly complex and difficult to observe, even with current advances in single-cell technologies \cite{grn}. For this reason, we are investigating the feasibility of scFMs to predict the GRN of cellular systems from input single-cell RNA sequencing (scRNA-seq) data \cite{scRNA-seq}. By inputting RNA expression data from many individual cells of varying types in various states, we hope to see the scFM ``learn'' the relationships between genes in the input data. If successful, this could lead to predicting future cell behavior. The insights gained from these predictions could benefit society in many ways. For example, our improved understanding of systems biology could be used to better predict and prevent disease in humans \cite{scEval_framework}.
+
+\subsection{Single-cell Foundation Models}
+
+scFMs are typically large neural networks trained on massive collections of scRNA-seq data using self-supervised or weakly supervised objectives. Examples include transformer-based or autoencoder-based models that learn embeddings through training to predict RNA expression levels or masked gene identities \cite{scFM_survey}. These embeddings, 1-D vectors calculated for each cell or for each gene within each cell, can capture shared biological structure across datasets, tissues, and conditions, encoding semantic information of cells and genes, such as identities of cells, functions of genes, etc. These embeddings are increasingly used as general-purpose representations for downstream tasks such as cell type classification, perturbation effect prediction, and trajectory inference \cite{scfm_benchmarking}. 
+
+In addition to their ability to represent cellular behavior, scFMs are capable of training on additional datasets in order to fine-tune for specific tasks \cite{scFM_survey}. While fine-tuning is beyond the scope of this project,  we are interested in using gene embeddings learned from scFM to train downstream machine learning models to attempt to predict GRNs in different cell types within the input scRNA-seq data.
+
+% \section{Predicting GRN with scFM}
+
+% Does this need its own section?
+
+\section{Goals of this Project}
+
+This project has three goals:
+\begin{enumerate}
+    \item How well can gene embeddings learned from scFM represent relationships between genes? Can they feasibly be used to conduct research on unknown GRN?
+    \item How practical are the computational requirements for using scFM in a meaningful capacity?
+    \item Among the widely used scFMs, which performs better?
+\end{enumerate}
+
+To accomplish these goals, we will learn embeddings from two of the most widely adopted scFMs, using the same input data. We will use these embeddings, along with ground-truth labels GRNs, to train classifiers to predict TF-target gene relationships. The prediction accuracy of these classifiers will be compared between scFMs, as well as the computational resources required for each.
+
+
+%% -----------------------------------------------
+\chapter{Methods}
+\label{ch:methods}
+
+
+\section{Benchmarked scFMs}
+
+\subsection{Geneformer}
+
+Geneformer is one of the earlier scFMs, published in 2021. It's core architecture consists of six transformer encoder units. This project used the V2 model, released in 2024. This model was trained on ~104M human single-cell transcriptomes/ with the self-supervised objective of predicting masked gene identities from the context of unmasked genes within each transcriptome. Input data is encoded as a ranked-value list of genes for each cell, ordered by normalized RNA expression levels, with a fixed vocabulary of ~20K protein-coding genes. It's output embeddings are a vector of length 1152 per-cell and/or per-gene \cite{geneformer}.
+
+\subsection{scGPT}
+
+Another popular scFM, scGPT, was published in 2023 . It's core consists of stacked transformer layers with multi-head attention that simultaneously predicts cell and gene embeddings. scGPT was trained on ~33 million human transcriptomes with  the self-supervised objective of predicting masked gene expression. Input gene expression levels are encoded into binned values. This binning allows scGPT to integrate multiple data sources as well as expand its gene vocabulary. It's output embeddings are a vector of length 512 consisting of per cell, gene, and additionally a `cls' embedding that provides a high-level overview of each cell \cite{cui2023scGPT}.
+
+\section{Datasets}
+
+\subsection{Immune Human Dataset}
+
+The dataset used for input into the above scFMs comes from a 2020 paper benchmarking the integration of scRNA-seq data from multiple tissues. It consists of 33,506 human immune system cells from 10 donors, spanning 12,303 genes across 16 cell types \cite{immune_dataset}. \Cref{fig:cls_embeddings} illustrates how cell behaviors are represented in scFM embeddings. Using UMAP, the 512-dimensional cell embeddings of our dataset, learned using scGPT, were reduced to 2-dimensional points and plotted. You can see that the plotted points of each cell type forms a non-random pattern.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/cls_embeddings.png}
+    \caption{A UMAP of cell (CLS) embeddings learned from scGPT, grouped by cell type.}
+    \label{fig:cls_embeddings}
+\end{figure}
+
+\subsection{TRRUST Database}
+
+To train classification models using the scFM and dataset described above, we needed a source of ``ground truth'' regarding relationships between TF and target genes. We used the Transcriptional Regulatory Relationships Unraveled by Sentence-based Text Mining (TRRUST) v2 database  \cite{trrust}. This database consists of 8,444 TF-target interactions in humans, mined from ~20M academic papers. Each TF-target pair present in the database has a relationship of 'Activation', ``Repression'', or ``Unknown''. Note that unknown relationships do not denote no relationship, just a relationship that is unclear whether the interaction is activation or repression.
+
+\section{Classification}
+
+Two machine learning classifiers were trained on the embeddings from each scFM, respectively. One was a binary classifier, which predicted TF-target pairs as having ``Relationship'' or ``No Relationship''. The second was a ternary classifier, which predicted TF-target pairs as having ``Activation'', ``Repression'', or ``None'' relationships.
+
+We applied the classification task to two cell types in the Immune Human Dataset to assess whether performance patterns generalize across different cell types: CD20+ B Cells (2873 cells, 11928 genes) and NKT cells (2745 cells, 11878 genes). One binary and one ternary classifier was trained from each scFM on each dataset, resulting in 8 total classification models.
+
+\subsection{Sample Selection}
+
+First, gene embeddings not shared by the vocabulary of both scFMs were omitted from the pool. Next, embeddings from genes present in TRRUST were paired into TF-target pairs. For the binary classifiers, these pairs were labeled as ``Relationship''. For the ternary classifiers, pairs with relationship ``Unknown'' were omitted and the remaining pairs were labeled as either ``Activation'' or ``Repression'', respectively.
+
+To select gene embedding pairs for the ``No Relationship''/``None'' classes, a random sample of gene embedding pairs not in TRRUST was deterministically selected. The size of this random sample was proportional to the total sample size of each classifier. The binary classifiers had ``No Relationship'' samples equal to the number of ``Relationship'' samples. The ternary classifiers had ``None'' samples equal to one-third of the total input sample size. In performing sample selection this way, each scFM received the same training data for a given classifier.
+
+\subsection{Bilinear Model}
+
+This project implemented a bilinear machine learning model for classification:
+
+\begin{equation}
+    \hat{y}_k = \mathbf{x}_{\text{TF}}^\top \cdot \mathbf{W}_k \cdot \mathbf{x}_{\text{Target}} + b_k
+    \label{eq:bilinear_model}
+\end{equation}
+
+We use the same classifier for both scFMs, keeping the model simple to focus on comparing the two scFMs rather than optimizing final performance.
+
+The output, $\hat{y}_k$, represents the logit for a given class $k$ from total classes $K$. The learnable parameters are the per-class bias $b_k$ and the per-class weight matrix $W_k$. The weight matrix has dimensions $n * n$, where $n$ is the embedding length. This shape captures relationships between components of $1 * n$ embeddings of the TF and target gene, as well as the embeddings as a whole. Weighted cross-entropy was the loss function used during training.
+
+\subsection{Training}
+
+A hyperparameter sweep was conducted to obtain an optimal learning rate and number of epochs for each classifier. This was done using a 5-fold stratified cross-validation across 5 learning rates (1e-2, 1e-3, 1e-4, 1e-5, 1e-6) and 4 different numbers of epochs (6, 12, 20, 50). The results from the validation sets of each trial were combined to examine accuracy, train/test loss, and macro F1 scores.
+
+When the optimal hyperparameters were obtained, a final 5-fold stratified cross-validation was performed. These results were combined, along with a list of predictions of gene relationships, from the validation sets of each fold. These results were saved to disk for downstream analysis.
+
+%% -----------------------------------------------
+\chapter{Results}
+\label{ch:results}
+
+
+\section{Experimental Setup}
+
+All computations for this project were performed on a single self-hosted machine. This machine is a System76 Gazelle 7 with 14 CPU cores, 64 GB RAM, and a 6GB NVIDIA RTX 3060 GPU. It ran Ubuntu 24 LTS and was accessed via SSH. Solutions for batching compute-intensive jobs were needed to address limitations, especially while learning Geneformer embeddings, but overall this amount of resources was sufficient to accomplish everything that was required for this project. 
+
+The source code for this project is publicly available on Github \footnote{\url{https://github.com/chasty2/scfm_benchmarking}}. It was written in Python 3.12 using uv as a package manager, pytest for unit testing, and Jupyter Notebooks to implement the tested libraries. All ML models used PyTorch 2.3.1, a version two years old at the time of writing, due to scGPT's extensive dependencies.
+
+\section{Learning Embeddings}
+
+It was not possible to learn all the gene embeddings of the input dataset in a single pass, even when limited to a single cell type. As a result, a workflow was created to calculate embeddings in batches. First the input dataset, an AnnData (Annotated data) object \cite{anndata} stored as .h5ad, was preprocessed into tokenized tensors for each model, respectively. Then, the input data was restricted to a single cell type. Next the averaged gene embeddings were encoded for a batch of cells, and this result was written to disk. This process was repeated for all cells. Finally, the batches were compiled, leaving one averaged embedding for each gene in the input data. This data was written to an AnnData object that contained the gene embeddings as well as the gene ID that each embedding belong to. These results were stored as a .h5ad file for future use. The AnnData object created to store each set of embeddings was identical, designed to be input into the same functions for training downstream. 
+
+Four sets of embeddings in total were encoded: one for each scFM using the CD20+ B cells subset, and one from each scFM using the NKT cells subset. The process of learning embeddings was similar across both scFMs. They differed in the size of batches and compute requirements, but the overall workflow was the same. \Cref{fig:encoding} shows a comparison of encoding embeddings between the scFMs.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/encoding_comparison.png}
+    \caption{Comparison of complexity of learning embeddings from scGPT vs. Geneformer}
+    \label{fig:encoding}
+\end{figure}
+
+\section{Classification Performance}
+
+In total, 8 classifier models were trained: A binary and ternary classifier from each of two scFM, from embeddings of two different cell types. \Cref{fig:classification} Summarizes the performance of the trained classifiers with their optimal hyperparameters. For an in-depth look at hyperparameter tuning, see \Cref{app:supplementary}.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/classification_performance.png}
+    \caption{Comparison of classification accuracy across each scFM and cell type}
+    \label{fig:classification}
+\end{figure}
+
+We see that within each cell type, both scFMs had the same input samples for a given classifier. We also see that binary classification was fairly successful, with each model scoring higher than the baseline by a significant amount. Ternary classification was less successful, with only Geneformer scoring above the baseline on both cell types. Overall Geneformer was the higher performer, having a higher prediction accuracy on each classifier as well as having consistent prediction accuracy across cell types. In the next section we will take a closer look at how well the scFMs predicted each class specifically, and see how much the scFMs agreed on predictions.
+
+\section{Comparison of Classifiers}
+
+\Cref{fig:confusion_binary} lists the confusion matrices from each binary classifier, where we see comparisons of predictions of each class to the ground truth for each scFM and data type. While prediction varies among the classifiers, we can see that each classifier is fairly consistent in predicting ``Relationship'' vs. ``No Relationship''. The predictions of the ternary classifiers in \Cref{fig:confusion_ternary} are much less consistent between the classes. Notably, each ternary classifier struggled to predict the ``Repression'' relationship as well as the others. We also see more consistent results across the cell types for each class prediction in the Geneformer classifiers than we do in the scGPT classifiers, similar to the accuracy scores.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/confusion_matrices_binary.png}
+    \caption{Confusion matrices of binary classifiers}
+    \label{fig:confusion_binary}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/confusion_matrices_ternary.png}
+    \caption{Confusion matrices of ternary classifiers}
+    \label{fig:confusion_ternary}
+\end{figure}
+
+In \Cref{fig:confusion_binary} we have agreement confusion matrices comparing the predictions of the scGPT binary classifiers to the Geneformer binary classifiers (Note that the ground truth is not measured on these plots). We see about 70 percent of all samples were predicted in agreement across the scFM. There is much less agreement among the ternary classifiers, as we can see in \Cref{fig:confusion_ternary}. Across both cell types, we see the most agreement in predicting ``Activation'' relationships, about 18 percent, which is still not very much. In the NKT cell classifiers, we also see some agreement on predicting ``None'' relationships. 
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scfm_agreement_confusion_binary.png}
+    \caption{Agreement confusion matrices of binary classifiers}
+    \label{fig:agreement_binary}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scfm_agreement_confusion_ternary.png}
+    \caption{Agreement confusion matrices of ternary classifiers}
+    \label{fig:agreement_ternary}
+\end{figure}
+
+
+%% -----------------------------------------------
+\chapter{Discussion}
+\label{ch:discussion}
+
+
+\section{Model Performance}
+
+A general trend we see across the results is that both scFMs perform fairly well at providing a high-level representation of the relationships between genes, and both struggled to predict more nuanced relationships. In the binary classifiers we see fairly high, fairly consistent prediction accuracy across each scFM and cell type. This accuracy drops in the ternary classifiers, and predictions become less consistent across the scFMs.
+
+We do see within Geneformer classifiers that prediction accuracies are consistent across cell types. While the accuracies are not as high as we would have liked, each class in each classifier has a similar prediction accuracy across both cell types. In the ternary classifier, accuracy is significantly lower for the ``Repression'' class than the other two classes. This was also observed in the scGPT classifiers.
+
+Both scFM underperformed in predicting ``Repression'' relationships, with Geneformer underperforming less. I think Geneformer's use of rank-value encoding allows it to capture nuance in distance between gene expression levels, which potentially allowed it to predict ``Repression'' relationships to the extent that it did. However, rank-value encoding can also lists genes with little to no expression at the bottom of the rank in a noisy order with other non-expressed genes. This could help explain the underperformance of predicting  ``Repression'' in Geneformer.
+
+scGPT's use of value binning is a less specific form of encoding, which could explain it's overall underperformance. It's not necessarily a worse model than Geneformer, I think it's strengths were not utilized in this project to the extent that I think they could have been. For example, scGPT could have combined multiple datasets to fine-tune to this specific task. This was unfortunately beyond the scope of this project, and Geneformer proved to be the higher performer in simpler conditions with limited data.
+
+%% TODO: Talk about why geneformer may have had higher performance?
+
+These models will need to show higher prediction accuracy for me to consider them for use as research tools. Higher prediction accuracy could be possible with more training data and implementing scFM fine-tuning. This could be a promising avenue for future work.
+
+\section{Analysis of scFM from an Engineering Standpoint}
+
+It was a vastly different experience to utilize each of these scFM. Geneformer was straightforward to configure, but required substantial compute resources. scGPT was resource efficient, but was extremely difficult to configure. If I were to select one of these scFM to setup infrastructure around for long-term use, it would be Geneformer.
+
+From an engineering standpoint, Geneformer has a simplicity that makes it appealing as a tool for long-term use. It has a limited number of features, but this lends to less dependencies and less burden on the maintainers. Instead of releasing new features that stretch maintainer bandwidth, they released a new scFM trained on more data. This focus on the core product over features is a good sign for Geneformer's long-term viability.
+
+scGPT maintenance does not follow this approach. The model is designed to be extensible, with a large number of features. While this is not an inherently ``bad'' design, it places a burden on the maintainers that is not always sustainable. In the case of scGPT, feature spread has led to a dependency on numerous packages, some of which are no longer maintained. Furthermore, many of the tutorials in the scGPT repository do not run on the latest version of the library in PyPI. scGPT is an impressive work of software, but I am not confident in it's long-term viability.
+
+
+\section{Analysis of Project Execution}
+
+I have a systems engineering background, so I spent a lot of time on making the encoding and training processes modular and easy to use. I spent a lot of time on engineering, and was not left with much time to conduct research once all the data was collected. I could have allocated my time a little better, but I am genuinely proud of how the software turned out. I would have liked additional time to meet some of the stretch goals (deploy models, incorporate spatial transcriptomics), but overall I feel accomplished in meeting the primary goals of this project.
+
+
+%% -----------------------------------------------
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+The purpose of this investigation was to benchmark two single-cell foundation models to evaluate their ability to predict gene relationship networks. We found that both scFM did fairly well at predicting high-level relationships between genes, but struggled to predict more nuanced relationships. Geneformer had higher prediction accuracies that were consistent across two cell types. Overall, we needed to see a higher performance to consider these models for use in a meaningful capacity. Future work could involve training classifiers using more data, specifically with a larger source of ground truth and more cell types. Another option for future work could involve fine-tuning these models for this specific task. It is very possible to see higher performance from a more robust training.
+
+An additional goal of this project was to evaluate the computational requirements of using scFM in a research setting. While restrictive, all work was accomplished using a single self-hosted machine. Furthermore, Geneformer has simple enough requirements to install and use in a cloud or shared GPU environment. If higher performance could be achieved from scFMs, they could prove to be a practical tool in future bioinformatics studies.
+
+%% ---- Bibliography ----
+\bibliographystyle{plainnat}
+\bibliography{references}   % expects a file named references.bib
+
+
+%% ---- Appendices ----
+\begin{appendices}
+
+\chapter{Supplementary Material}
+\label{app:supplementary}
+
+This section contains the heatmaps of macro F1 scores and plots of train/test loss collected during hyperparameter tuning for each scFM. It also contains classificaton reports from each of the classifiers trained using the optimal parameters.
+
+\section{scGPT Binary Classifier - CD20+ B Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_binary_cd20/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for binary classifiers trained from scGPT embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:heatmap_scgpt_binary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_binary_cd20/loss_lr1e-05_e50.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for binary classifiers trained from scGPT embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:loss_scgpt_binary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_binary_cd20/classification.png}
+    \caption{Classification report of binary classier trained from scGPT embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:report_scgpt_binary_cd20}
+\end{figure}
+
+
+\section{scGPT Binary Classifier - NKT Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_binary_nkt/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for binary classifiers trained from scGPT embeddings from input NKT cell scRNA-seq data}
+    \label{fig:heatmap_scgpt_binary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_binary_nkt/loss_lr1e-05_e50.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for binary classifiers trained from scGPT embeddings from input NKT cell scRNA-seq data}
+    \label{fig:loss_scgpt_binary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_binary_nkt/classification.png}
+    \caption{Classification report of binary classier trained from scGPT embeddings from input NKT cell scRNA-seq data}
+    \label{fig:report_scgpt_binary_nkt}
+\end{figure}
+
+
+\section{scGPT Ternary Classifier - CD20+ B Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_ternary_cd20/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for ternary classifiers trained from scGPT embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:heatmap_scgpt_ternary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_ternary_cd20/loss_lr1e-06_e50.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for ternary classifiers trained from scGPT embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:loss_scgpt_ternary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_ternary_cd20/classification.png}
+    \caption{Classification report of ternary classier trained from scGPT embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:report_scgpt_ternary_cd20}
+\end{figure}
+
+\section{scGPT Ternary Classifier - NKT Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_ternary_nkt/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for ternary classifiers trained from scGPT embeddings from input NKT cell scRNA-seq data}
+    \label{fig:heatmap_scgpt_ternary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_ternary_nkt/loss_lr1e-05_e50.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for ternary classifiers trained from scGPT embeddings from input NKT cell scRNA-seq data}
+    \label{fig:loss_scgpt_ternary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/scgpt_ternary_nkt/classification.png}
+    \caption{Classification report of ternary classier trained from scGPT embeddings from input NKT cell scRNA-seq data}
+    \label{fig:report_scgpt_ternary_nkt}
+\end{figure}
+
+\section{Geneformer Binary Classifier - CD20+ B Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_binary_cd20/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for binary classifiers trained from Geneformer embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:heatmap_geneformer_binary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_binary_cd20/loss_lr1e-04_e20.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for binary classifiers trained from Geneformer embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:loss_geneformer_binary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_binary_cd20/classification.png}
+    \caption{Classification report of binary classier trained from Geneformer embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:report_geneformer_binary_cd20}
+\end{figure}
+
+\section{Geneformer Binary Classifier - NKT Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_binary_nkt/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for binary classifiers trained from Geneformer embeddings from input NKT cell scRNA-seq data}
+    \label{fig:heatmap_geneformer_binary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_binary_nkt/loss_lr1e-03_e8.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for binary classifiers trained from Geneformer embeddings from input NKT cell scRNA-seq data}
+    \label{fig:loss_geneformer_binary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_binary_nkt/classification.png}
+    \caption{Classification report of binary classier trained from Geneformer embeddings from input NKT cell scRNA-seq data}
+    \label{fig:report_geneformer_binary_nkt}
+\end{figure}
+
+
+\section{Geneformer Ternary Classifier - CD20+ B Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_ternary_cd20/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for ternary classifiers trained from Geneformer embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:heatmap_geneformer_ternary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_ternary_cd20/loss_lr1e-03_e50.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for ternary classifiers trained from Geneformer embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:loss_geneformer_ternary_cd20}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_ternary_cd20/classification.png}
+    \caption{Classification report of ternary classier trained from Geneformer embeddings from input CD20+ B cell scRNA-seq data}
+    \label{fig:report_geneformer_ternary_cd20}
+\end{figure}
+
+
+\section{Geneformer Ternary Classifier - NKT Cells}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_ternary_nkt/f1_heatmap.png}
+    \caption{Heatmap of averaged macro F1 scores from each validation set of 5-fold cross validations from various learning rates and epochs for ternary classifiers trained from Geneformer embeddings from input NKT cell scRNA-seq data}
+    \label{fig:heatmap_geneformer_ternary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_ternary_nkt/loss_lr1e-03_e12.png}
+    \caption{Plot of train/test loss at each epoch over a 5-fold cross validation for ternary classifiers trained from Geneformer embeddings from input NKT cell scRNA-seq data}
+    \label{fig:loss_geneformer_ternary_nkt}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/geneformer_ternary_nkt/classification.png}
+    \caption{Classification report of ternary classier trained from Geneformer embeddings from input NKT cell scRNA-seq data}
+    \label{fig:report_geneformer_ternary_nkt}
+\end{figure}
+
+
+\end{appendices}
+
+
+\end{document}
