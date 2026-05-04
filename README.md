@@ -1,6 +1,6 @@
 # scFM_benchmarking
 
-The purpose of this investigation is to evaluate how well scFMs represent relationships between genes. To do this, we trained simple classifier models from the outputs of two different scFMs: scGPT and Geneformer. The predictive accuracy of these models was benchmarked against known ground truths of transcriptional regulatory relationships using the TRRUST database. These models showed promise in predicting high-level relationships between genes (``Relationship'' vs. ``No Relationship''), but struggled to predict more nuanced relationships (``Activation'' vs. ``Repression'' vs. ``None''). Future work to train classifiers on larger datasets and fine-tuned scFM could potentially improve model performance.
+The purpose of this investigation is to evaluate how well scFMs represent relationships between genes (at this point in time). To do this, we trained simple classifier models from the outputs of two different scFMs: scGPT and Geneformer. The predictive accuracy of these models was benchmarked against known ground truths of transcriptional regulatory relationships using the TRRUST database. These models showed promise in predicting high-level relationships between genes (Relationship vs. No Relationship), but struggled to predict more nuanced relationships (Activation vs. Repression vs. None). Future work to train classifiers on larger datasets and fine-tuned scFM could potentially improve model performance.
 
 ## System Dependencies
 
